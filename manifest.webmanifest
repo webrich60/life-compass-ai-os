@@ -1,0 +1,6 @@
+{
+  "id":"./","name":"Life Compass AI OS","short_name":"Life Compass","description":"人生をAIと共に設計・分析・成長させる人生OS","start_url":"./","scope":"./","display":"standalone","orientation":"any",
+  "background_color":"#f5f6f2","theme_color":"#174f3a","lang":"ja",
+  "categories":["productivity","lifestyle","health"],
+  "icons":[{"src":"assets/icon.svg","sizes":"any","type":"image/svg+xml","purpose":"any maskable"}]
+}
