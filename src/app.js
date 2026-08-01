@@ -152,11 +152,11 @@ function isOverdue(row) {
 function radarSvg() {
   const cx=180, cy=180, radius=133, count=DOMAINS.length;
   const point=(index,ratio=1)=>{const angle=-Math.PI/2+index*2*Math.PI/count;return `${cx+Math.cos(angle)*radius*ratio},${cy+Math.sin(angle)*radius*ratio}`};
-  const grids=[.25,.5,.75,1].map(ratio=>`<polygon points="${DOMAINS.map((_,index)=>point(index,ratio)).join(' ')}" fill="none" stroke="#dfe6e1"/>`).join('');
-  const axes=DOMAINS.map((_,index)=>`<line x1="${cx}" y1="${cy}" x2="${point(index).split(',')[0]}" y2="${point(index).split(',')[1]}" stroke="#e5e9e6"/>`).join('');
+  const grids=[.25,.5,.75,1].map(ratio=>`<polygon points="${DOMAINS.map((_,index)=>point(index,ratio)).join(' ')}" fill="none" stroke="#d6e2f2"/>`).join('');
+  const axes=DOMAINS.map((_,index)=>`<line x1="${cx}" y1="${cy}" x2="${point(index).split(',')[0]}" y2="${point(index).split(',')[1]}" stroke="#e2eaf5"/>`).join('');
   const values=DOMAINS.map((domain,index)=>point(index,Math.max(.02,Number(state.scores[domain.id]||0)/100))).join(' ');
-  const labels=DOMAINS.map((domain,index)=>{const [x,y]=point(index,1.17).split(',');return `<text x="${x}" y="${y}" text-anchor="middle" dominant-baseline="middle" font-size="12" fill="#526159">${domain.label}</text>`}).join('');
-  return `<svg class="radar" viewBox="0 0 360 360" role="img" aria-label="人生レーダー">${grids}${axes}<polygon points="${values}" fill="rgba(23,107,74,.20)" stroke="#176b4a" stroke-width="3"/>${labels}</svg>`;
+  const labels=DOMAINS.map((domain,index)=>{const [x,y]=point(index,1.17).split(',');return `<text x="${x}" y="${y}" text-anchor="middle" dominant-baseline="middle" font-size="12" font-weight="700" fill="#26384f">${domain.label}</text>`}).join('');
+  return `<svg class="radar" viewBox="0 0 360 360" role="img" aria-label="人生レーダー">${grids}${axes}<polygon points="${values}" fill="rgba(21,88,176,.20)" stroke="#1558b0" stroke-width="3"/>${labels}</svg>`;
 }
 
 function taskHtml(row) {
