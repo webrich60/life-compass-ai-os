@@ -22,10 +22,11 @@
         <button class="nav-link" data-page="settings"><span>⚙</span><span>設定</span></button>
       </div>
     </aside>
+    <button class="sidebar-backdrop" id="sidebarBackdrop" type="button" aria-label="メニューを閉じる"></button>
 
     <main class="main">
       <header class="topbar">
-        <button class="icon-btn mobile-only" id="menuButton" aria-label="メニュー">☰</button>
+        <button class="icon-btn mobile-only" id="menuButton" aria-label="メニューを開く" aria-controls="sidebar" aria-expanded="false">☰</button>
         <div><p class="eyebrow" id="todayLabel"></p><h1 id="pageTitle">今日のコンパス</h1></div>
         <div class="top-actions">
           <button class="search-trigger" data-page="search" aria-label="データを検索"><span>⌕</span><span>検索</span></button>
