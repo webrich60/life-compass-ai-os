@@ -2,21 +2,132 @@ import { SCHEMA_VERSION, normalizeState, touchState, isoNow } from './model.js';
 
 export const CACHE_KEY = 'life_compass_ai_os_cache_v1';
 export const SETTINGS_KEY = 'life_compass_ai_os_settings_v1';
+export const DB_NAME = 'life_compass_ai_os';
+export const DB_STORE = 'state';
+export const DB_STATE_KEY = 'main';
 
-export function loadCache() {
-  try { return normalizeState(JSON.parse(localStorage.getItem(CACHE_KEY) || '{}')); }
-  catch { return normalizeState({}); }
+function readLocalJson(key) {
+  try {
+    if (typeof localStorage === 'undefined') return null;
+    const value = localStorage.getItem(key);
+    return value ? JSON.parse(value) : null;
+  } catch (_) { return null; }
 }
 
-export function saveCache(state, { touch = true } = {}) {
-  const next = touch ? touchState(state) : normalizeState(state);
+function openDatabase() {
+  return new Promise((resolve, reject) => {
+    if (typeof indexedDB === 'undefined') return reject(new Error('IndexedDB is unavailable'));
+    const request = indexedDB.open(DB_NAME, 1);
+    request.onupgradeneeded = () => {
+      const db = request.result;
+      if (!db.objectStoreNames.contains(DB_STORE)) db.createObjectStore(DB_STORE);
+    };
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error || new Error('IndexedDB open failed'));
+    request.onblocked = () => reject(new Error('IndexedDB upgrade blocked'));
+  });
+}
+
+async function readDatabaseState() {
+  const db = await openDatabase();
   try {
-    localStorage.setItem(CACHE_KEY, JSON.stringify(next));
-    localStorage.setItem(SETTINGS_KEY, JSON.stringify(next.settings));
-  } catch (error) {
-    throw new Error('端末の保存容量が不足しています。JSONバックアップを書き出してから、不要なサイトデータを整理してください。');
+    return await new Promise((resolve, reject) => {
+      const request = db.transaction(DB_STORE, 'readonly').objectStore(DB_STORE).get(DB_STATE_KEY);
+      request.onsuccess = () => resolve(request.result || null);
+      request.onerror = () => reject(request.error || new Error('IndexedDB read failed'));
+    });
+  } finally { db.close(); }
+}
+
+async function writeDatabaseState(state) {
+  const db = await openDatabase();
+  try {
+    await new Promise((resolve, reject) => {
+      const transaction = db.transaction(DB_STORE, 'readwrite');
+      transaction.objectStore(DB_STORE).put(state, DB_STATE_KEY);
+      transaction.oncomplete = () => resolve();
+      transaction.onerror = () => reject(transaction.error || new Error('IndexedDB write failed'));
+      transaction.onabort = () => reject(transaction.error || new Error('IndexedDB write aborted'));
+    });
+  } finally { db.close(); }
+}
+
+async function deleteDatabaseState() {
+  const db = await openDatabase();
+  try {
+    await new Promise((resolve, reject) => {
+      const transaction = db.transaction(DB_STORE, 'readwrite');
+      transaction.objectStore(DB_STORE).delete(DB_STATE_KEY);
+      transaction.oncomplete = () => resolve();
+      transaction.onerror = () => reject(transaction.error || new Error('IndexedDB delete failed'));
+      transaction.onabort = () => reject(transaction.error || new Error('IndexedDB delete aborted'));
+    });
+  } finally { db.close(); }
+}
+
+function mirrorLightSettings(settings) {
+  try {
+    if (typeof localStorage !== 'undefined') localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+    return true;
+  } catch (_) { return false; }
+}
+
+function removeLegacyFullCache() {
+  try {
+    if (typeof localStorage !== 'undefined') localStorage.removeItem(CACHE_KEY);
+  } catch (_) { /* 他ツールのデータには触れず、Life Compassの旧キーだけを対象にする。 */ }
+}
+
+export async function loadCache() {
+  let databaseState = null;
+  try { databaseState = await readDatabaseState(); }
+  catch (_) { /* 非対応環境では旧キャッシュへ安全にフォールバックする。 */ }
+  if (databaseState) return normalizeState(databaseState);
+
+  const legacyState = readLocalJson(CACHE_KEY);
+  const lightSettings = readLocalJson(SETTINGS_KEY);
+  const next = normalizeState(legacyState || (lightSettings ? { settings: lightSettings } : {}));
+
+  // v2.1.2以前の全量localStorageを、初回起動時に容量の大きいIndexedDBへ自動移行する。
+  try {
+    await writeDatabaseState(next);
+    mirrorLightSettings(next.settings);
+    removeLegacyFullCache();
+  } catch (_) {
+    // 移行できない環境でも、読み取れた既存データは画面上で維持する。
   }
   return next;
+}
+
+export async function saveCache(state, { touch = true } = {}) {
+  const next = touch ? touchState(state) : normalizeState(state);
+  try {
+    await writeDatabaseState(next);
+    mirrorLightSettings(next.settings);
+    removeLegacyFullCache();
+    return next;
+  } catch (databaseError) {
+    // 古いブラウザ向けの最終フォールバック。通常はIndexedDBが使用される。
+    try {
+      if (typeof localStorage === 'undefined') throw databaseError;
+      localStorage.setItem(CACHE_KEY, JSON.stringify(next));
+      localStorage.setItem(SETTINGS_KEY, JSON.stringify(next.settings));
+      return next;
+    } catch (_) {
+      throw new Error('この端末への保存に失敗しました。JSONバックアップは削除せず、ブラウザのプライベートモードを終了してから再度お試しください。');
+    }
+  }
+}
+
+export async function clearLocalCache() {
+  try { await deleteDatabaseState(); }
+  catch (_) { /* IndexedDBが使えない環境でもLife Compassの旧キーは整理する。 */ }
+  try {
+    if (typeof localStorage !== 'undefined') {
+      localStorage.removeItem(CACHE_KEY);
+      localStorage.removeItem(SETTINGS_KEY);
+    }
+  } catch (_) { /* ignore */ }
 }
 
 export function exportBackup(state) {

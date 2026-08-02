@@ -3,8 +3,8 @@ import {
   calculateLifeScore, todayTasks, isoNow, localDateKey, activeRows, reviewDue
 } from './model.js';
 import {
-  CACHE_KEY, SETTINGS_KEY, loadCache, saveCache, exportBackup, synchronize,
-  testConnection, uploadAttachment
+  loadCache, saveCache, exportBackup, synchronize,
+  testConnection, uploadAttachment, clearLocalCache
 } from './storage.js';
 import { inspectLegacyJson, applyMigration, inspectLegacyJsonBatch, applyMigrationBatch } from './migration.js';
 import { askAI, buildNotebookMarkdown } from './ai.js';
@@ -72,7 +72,7 @@ function initialPage() {
   return normalized;
 }
 
-let state = loadCache();
+let state = createEmptyState();
 let page = initialPage();
 let migrationInspection = null;
 let syncTimer = null;
@@ -113,8 +113,8 @@ function toast(message, type = '') {
   setTimeout(() => element.remove(), 3800);
 }
 
-function commit(next, message = '保存しました', { autoSync = true, rerender = false } = {}) {
-  state = saveCache(next);
+async function commit(next, message = '保存しました', { autoSync = true, rerender = false } = {}) {
+  state = await saveCache(next);
   updateChrome();
   if (message) toast(message);
   if (autoSync) scheduleAutoSync();
@@ -374,16 +374,16 @@ function render() {
 
 function bindPage() {
   document.querySelectorAll('[data-score]').forEach(element => element.addEventListener('input',()=>element.nextElementSibling.value=element.value));
-  document.querySelectorAll('[data-setting]').forEach(element => element.addEventListener('change',()=>{state.settings[element.dataset.setting]=element.value;commit(state,'AI設定を変更しました')}));
-  document.querySelectorAll('[data-theory]').forEach(element => element.addEventListener('change',()=>{state.settings.theories[element.dataset.theory]=element.checked;commit(state,'分析理論を更新しました')}));
-  $('#profileForm')?.addEventListener('submit',event => {
+  document.querySelectorAll('[data-setting]').forEach(element => element.addEventListener('change',async()=>{state.settings[element.dataset.setting]=element.value;await commit(state,'AI設定を変更しました')}));
+  document.querySelectorAll('[data-theory]').forEach(element => element.addEventListener('change',async()=>{state.settings.theories[element.dataset.theory]=element.checked;await commit(state,'分析理論を更新しました')}));
+  $('#profileForm')?.addEventListener('submit',async event => {
     event.preventDefault();
     const data = Object.fromEntries(new FormData(event.currentTarget));
     const now = isoNow();
     const fieldUpdatedAt = {...state.profile.fieldUpdatedAt};
     for (const [key,value] of Object.entries(data)) if (String(value) !== String(state.profile[key] ?? '')) fieldUpdatedAt[key] = now;
     state.profile = {...state.profile,...data,fieldUpdatedAt,updatedAt:now};
-    commit(state,'プロフィールを保存しました');
+    await commit(state,'プロフィールを保存しました');
   });
   $('#globalSearch')?.addEventListener('input', updateSearchResults);
   document.querySelectorAll('[data-search-kind]').forEach(button => button.addEventListener('click',()=>{
@@ -446,7 +446,7 @@ function openRecordDialog(kind, id = '') {
         toast(`本文は保存しましたが、添付は保存できませんでした：${error.message}`,'error');
       }
     }
-    commit(state,`${KIND_LABELS[kind]}を${existing?'更新':'保存'}しました`);
+    await commit(state,`${KIND_LABELS[kind]}を${existing?'更新':'保存'}しました`);
     dialog.close();
     render();
   });
@@ -498,7 +498,7 @@ function updateCostPreview() {
   target.innerHTML = `<div class="metric-card card"><div><small>Gemini／1日</small><b>${yen(cost.dailyYen)}</b></div></div><div class="metric-card card"><div><small>Gemini／1か月</small><b>${yen(cost.monthlyYen)}</b></div></div><div class="metric-card card"><div><small>Gemini／1年</small><b>${yen(cost.yearlyYen)}</b></div></div><div class="metric-card card"><div><small>月間質問数</small><b>${cost.monthlyQuestions.toLocaleString('ja-JP')}回</b></div></div>`;
 }
 
-function saveIntegrationSettings({ message = 'AI連携設定を保存しました', rerender = true } = {}) {
+async function saveIntegrationSettings({ message = 'AI連携設定を保存しました', rerender = true } = {}) {
   const integrations = state.settings.integrations;
   integrations.line = {
     ...integrations.line,
@@ -519,7 +519,7 @@ function saveIntegrationSettings({ message = 'AI連携設定を保存しまし�
     scopes: currentScopes('gpt')
   };
   integrations.cost = currentCostConfig();
-  commit(state, message, { autoSync: true, rerender });
+  await commit(state, message, { autoSync: true, rerender });
 }
 
 function exportGptArtifact(type) {
@@ -546,19 +546,19 @@ async function handleAction(action, element) {
     if (action === 'save-scores') {
       const now=isoNow();
       document.querySelectorAll('[data-score]').forEach(input=>{if(Number(state.scores[input.dataset.score])!==Number(input.value)){state.scores[input.dataset.score]=Number(input.value);state.scoreUpdatedAt[input.dataset.score]=now}});
-      commit(state,'人生レーダーを保存しました',{rerender:true}); return;
+      await commit(state,'人生レーダーを保存しました',{rerender:true}); return;
     }
     if (action === 'done') {
       const row = state[collectionFor(element.dataset.kind)]?.find(item=>item.id===element.dataset.id);
-      if (row) { row.status='done'; row.updatedAt=isoNow(); commit(state,'完了にしました',{rerender:true}); } return;
+      if (row) { row.status='done'; row.updatedAt=isoNow(); await commit(state,'完了にしました',{rerender:true}); } return;
     }
     if (action === 'delete-record') {
       const row = state[collectionFor(element.dataset.kind)]?.find(item=>item.id===element.dataset.id);
-      if (row && confirm('この記録を削除しますか？ 後から「連携・移行」で復元できます。')) { row.deletedAt=isoNow();row.updatedAt=isoNow();commit(state,'記録を削除しました',{rerender:true}); } return;
+      if (row && confirm('この記録を削除しますか？ 後から「連携・移行」で復元できます。')) { row.deletedAt=isoNow();row.updatedAt=isoNow();await commit(state,'記録を削除しました',{rerender:true}); } return;
     }
     if (action === 'restore-record') {
       const row = state[collectionFor(element.dataset.kind)]?.find(item=>item.id===element.dataset.id);
-      if (row) { row.deletedAt=null;row.updatedAt=isoNow();commit(state,'記録を復元しました',{rerender:true}); } return;
+      if (row) { row.deletedAt=null;row.updatedAt=isoNow();await commit(state,'記録を復元しました',{rerender:true}); } return;
     }
     if (action === 'ask-ai') return runAI(element.dataset.mode);
     if (action === 'quick-ai') return setPage('ai');
@@ -583,10 +583,10 @@ async function handleAction(action, element) {
     if (action === 'export-json') { downloadBlob(exportBackup(state),`LifeCompassAIOS_backup_${dateStamp()}.json`);toast('JSONバックアップを書き出しました');return; }
     if (action === 'import-json') return $('#jsonFile').click();
     if (action.startsWith('export-')) return exportFor(action);
-    if (action === 'save-settings') { state.settings.gasUrl=$('#gasUrl').value.trim();state.settings.syncToken=$('#syncToken').value.trim();state.settings.syncEnabled=Boolean(state.settings.gasUrl&&state.settings.syncToken);state.settings.autoSync=$('#autoSync').checked;commit(state,'接続設定を保存しました',{autoSync:false,rerender:true});return; }
-    if (action === 'save-display') { state.settings.fontScale=Number($('#fontScale').value);commit(state,'表示設定を保存しました',{rerender:true});return; }
+    if (action === 'save-settings') { state.settings.gasUrl=$('#gasUrl').value.trim();state.settings.syncToken=$('#syncToken').value.trim();state.settings.syncEnabled=Boolean(state.settings.gasUrl&&state.settings.syncToken);state.settings.autoSync=$('#autoSync').checked;await commit(state,'接続設定を保存しました',{autoSync:false,rerender:true});return; }
+    if (action === 'save-display') { state.settings.fontScale=Number($('#fontScale').value);await commit(state,'表示設定を保存しました',{rerender:true});return; }
     if (action === 'install-app') return installApp();
-    if (action === 'reset-local' && confirm('この端末のキャッシュを初期化します。クラウド正本は削除されません。先にJSONバックアップを保存しましたか？')) { localStorage.removeItem(CACHE_KEY);localStorage.removeItem(SETTINGS_KEY);state=createEmptyState();state=saveCache(state,{touch:false});toast('この端末のキャッシュを初期化しました');render(); }
+    if (action === 'reset-local' && confirm('この端末のキャッシュを初期化します。クラウド正本は削除されません。先にJSONバックアップを保存しましたか？')) { await clearLocalCache();state=createEmptyState();state=await saveCache(state,{touch:false});toast('この端末のキャッシュを初期化しました');render(); }
   } catch (error) { toast(error.message || String(error),'error'); render(); }
 }
 
@@ -598,7 +598,7 @@ async function runAI(mode) {
   try {
     const item=await askAI(state,question.value.trim(),mode);
     state.aiHistory.push(item);state.aiHistory=state.aiHistory.slice(-100);
-    commit(state,'AI分析を保存しました');
+    await commit(state,'AI分析を保存しました');
     result.classList.remove('loading');result.textContent=item.answer;
   } catch (error) { result.classList.remove('loading');result.textContent=`エラー：${error.message}`;toast(error.message,'error'); }
 }
@@ -612,7 +612,7 @@ async function runSimulation() {
     const item=await askAI(state,question,'simulation');
     state.aiHistory.push(item);
     state.simulations.push(normalizeRecord({kind:'simulation',domain:'challenge',title:`${horizon}｜${condition.slice(0,40)}`,body:item.answer,details:{condition,horizon,assumptions},date:localDateKey(),createdAt:item.createdAt,updatedAt:item.createdAt},'simulation'));
-    commit(state,'シミュレーション結果を保存しました');result.classList.remove('loading');result.textContent=item.answer;
+    await commit(state,'シミュレーション結果を保存しました');result.classList.remove('loading');result.textContent=item.answer;
   }catch(error){result.classList.remove('loading');result.textContent=`エラー：${error.message}`;toast(error.message,'error')}
 }
 
@@ -624,7 +624,7 @@ async function generateReview(period,button) {
     const item=await askAI(state,question,`review_${period}`);
     state.aiHistory.push(item);
     state.reviews.push(normalizeRecord({kind:'review',domain:'happiness',title:`${labels[period]}レビュー`,body:item.answer,date:localDateKey(),details:{period},createdAt:item.createdAt,updatedAt:item.createdAt},'review'));
-    commit(state,`${labels[period]}レビューを保存しました`);render();
+    await commit(state,`${labels[period]}レビューを保存しました`);render();
   } catch(error) { button.disabled=false;button.textContent='もう一度試す';toast(error.message,'error'); }
 }
 
@@ -653,7 +653,7 @@ function showMigration(fileNames = []) {
   const sourceText=stats.sourceCount>1?`${stats.sourceCount}ファイルを比較しました。`:'1ファイルを検査しました。';
   dialog.innerHTML=`<div class="modal-head"><div><span class="badge">安全な移行</span><h2>旧JSONの比較結果</h2></div><button class="icon-btn" data-close>×</button></div><div class="modal-body"><p>${sourceText} まだ新OSへ反映していません。</p>${fileNames.length?`<p class="migration-detail">${fileNames.map(esc).join(' ／ ')}</p>`:''}<div class="migration-summary"><div class="card"><b>${stats.imported}</b><small>追加候補</small></div><div class="card"><b>${stats.duplicates}</b><small>重複</small></div><div class="card"><b>${stats.conflicts}</b><small>競合</small></div><div class="card"><b>${stats.repaired||0}</b><small>復元対象</small></div></div>${issues.map(issue=>`<p class="migration-notice">${esc(issue)}</p>`).join('')}<p class="migration-detail">プロフィール ${stats.profileFields||0}項目／プロフィールから専用領域へ移す記録 ${stats.profileDerivedRecords||0}件</p><h3>統合方法</h3><div class="form-grid"><div class="field"><label>プロフィール</label><select id="migrationProfile"><option value="fill_empty">新OSの空欄を旧データで補う（推奨）</option><option value="current">現在の新OSを維持</option><option value="incoming">最も入力が多い旧プロフィールを採用</option></select></div><div class="field"><label>同じIDで内容が異なる場合</label><select id="migrationConflict"><option value="current">現在の新OSを維持（推奨）</option><option value="keep_both">両方残す</option><option value="incoming">旧JSONを採用</option></select></div></div><p><b>重複は追加しません。</b>一発上書きではなくID単位で統合します。</p></div><div class="modal-actions"><button class="btn ghost" data-close>中止</button><button class="btn" data-action="apply-migration">この内容で統合</button></div>`;
   dialog.showModal();dialog.querySelectorAll('[data-close]').forEach(button=>button.onclick=()=>dialog.close());
-  dialog.querySelector('[data-action="apply-migration"]').onclick=()=>{state=migrationInspection.batch?applyMigrationBatch(state,migrationInspection,{profile:$('#migrationProfile').value,conflict:$('#migrationConflict').value}):applyMigration(state,migrationInspection,{profile:$('#migrationProfile').value,conflict:$('#migrationConflict').value});commit(state,'旧JSONを新OSへ統合しました');dialog.close();render()};
+  dialog.querySelector('[data-action="apply-migration"]').onclick=async()=>{state=migrationInspection.batch?applyMigrationBatch(state,migrationInspection,{profile:$('#migrationProfile').value,conflict:$('#migrationConflict').value}):applyMigration(state,migrationInspection,{profile:$('#migrationProfile').value,conflict:$('#migrationConflict').value});await commit(state,'旧JSONを新OSへ統合しました');dialog.close();render()};
 }
 
 function updateSearchResults() {
@@ -690,11 +690,11 @@ async function registerServiceWorker() {
   if (!('serviceWorker' in navigator)) return;
   const hadController = Boolean(navigator.serviceWorker.controller);
   try {
-    const registration = await navigator.serviceWorker.register('./sw.js?v=2.1.2', { updateViaCache:'none' });
+    const registration = await navigator.serviceWorker.register('./sw.js?v=2.1.3', { updateViaCache:'none' });
     await registration.update();
     if (hadController) {
       navigator.serviceWorker.addEventListener('controllerchange',()=>{
-        const refreshKey='life-compass-sw-refresh-v2.1.2';
+        const refreshKey='life-compass-sw-refresh-v2.1.3';
         if(sessionStorage.getItem(refreshKey))return;
         sessionStorage.setItem(refreshKey,'1');
         location.reload();
@@ -704,6 +704,11 @@ async function registerServiceWorker() {
     // オフラインや非対応環境でも、端末保存版として通常利用を続ける。
   }
 }
-registerServiceWorker();
-render();
-scheduleAutoSync();
+async function bootstrap() {
+  try { state = await loadCache(); }
+  catch (error) { toast(error.message || '端末データを読み込めませんでした','error'); }
+  render();
+  scheduleAutoSync();
+  registerServiceWorker();
+}
+bootstrap();
