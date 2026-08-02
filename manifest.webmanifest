@@ -1,5 +1,5 @@
 {
-  "id":"./","name":"Life Compass AI OS","short_name":"Life Compass","description":"目標、夢、欲しいもの、行きたい場所、挑戦・体験までAIと共に設計する人生OS","start_url":"./","scope":"./","display":"standalone","orientation":"any",
+  "id":"./","name":"Life Compass AI OS","short_name":"Life Compass","description":"目標、夢、欲しいもの、行きたい場所、挑戦・体験までAIと共に設計する人生OS","start_url":"./index.html#home","scope":"./","display":"standalone","orientation":"any",
   "background_color":"#f3f7fc","theme_color":"#1558b0","lang":"ja",
   "categories":["productivity","lifestyle","health"],
   "icons":[{"src":"assets/icon.svg","sizes":"any","type":"image/svg+xml","purpose":"any maskable"}]

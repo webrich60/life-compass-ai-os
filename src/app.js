@@ -61,8 +61,19 @@ const PROFILE_FIELDS = [
   ['satisfaction','現在の満足度','text'],['notes','自由メモ','textarea']
 ];
 
+const validPage = next => PAGES.some(([id]) => id === next) || EXTRA_PAGES.includes(next) ? next : 'home';
+
+function initialPage() {
+  const requested = location.hash.slice(1);
+  const normalized = validPage(requested);
+  if (requested !== normalized) {
+    history.replaceState(null, '', `${location.pathname}${location.search}#${normalized}`);
+  }
+  return normalized;
+}
+
 let state = loadCache();
-let page = location.hash.slice(1) || 'home';
+let page = initialPage();
 let migrationInspection = null;
 let syncTimer = null;
 let syncInFlight = false;
@@ -87,7 +98,7 @@ function setSidebarOpen(open) {
 }
 
 function setPage(next) {
-  page = PAGES.some(([id]) => id === next) || EXTRA_PAGES.includes(next) ? next : 'home';
+  page = validPage(next);
   history.replaceState(null,'',`#${page}`);
   render();
   setSidebarOpen(false);
@@ -665,11 +676,34 @@ $('#sidebarBackdrop').onclick=()=>setSidebarOpen(false);
 document.addEventListener('keydown',event=>{if(event.key==='Escape')setSidebarOpen(false)});
 window.addEventListener('resize',()=>{if(!window.matchMedia('(max-width:980px)').matches)setSidebarOpen(false)});
 $('#jsonFile').addEventListener('change',event=>{if(event.target.files.length)inspectFiles(event.target.files);event.target.value=''});
-window.addEventListener('hashchange',()=>{page=location.hash.slice(1)||'home';render()});
+window.addEventListener('hashchange',()=>{
+  const requested=location.hash.slice(1);
+  page=validPage(requested);
+  if(requested!==page)history.replaceState(null,'',`${location.pathname}${location.search}#${page}`);
+  render();
+});
 window.addEventListener('online',()=>{updateChrome();scheduleAutoSync()});
 window.addEventListener('offline',()=>updateChrome());
 window.addEventListener('beforeinstallprompt',event=>{event.preventDefault();deferredInstallPrompt=event;$('#installButton').hidden=false});
 $('#todayLabel').textContent=new Intl.DateTimeFormat('ja-JP',{year:'numeric',month:'long',day:'numeric',weekday:'short',timeZone:'Asia/Tokyo'}).format(new Date());
-if('serviceWorker' in navigator) navigator.serviceWorker.register('./sw.js').catch(()=>{});
+async function registerServiceWorker() {
+  if (!('serviceWorker' in navigator)) return;
+  const hadController = Boolean(navigator.serviceWorker.controller);
+  try {
+    const registration = await navigator.serviceWorker.register('./sw.js?v=2.1.2', { updateViaCache:'none' });
+    await registration.update();
+    if (hadController) {
+      navigator.serviceWorker.addEventListener('controllerchange',()=>{
+        const refreshKey='life-compass-sw-refresh-v2.1.2';
+        if(sessionStorage.getItem(refreshKey))return;
+        sessionStorage.setItem(refreshKey,'1');
+        location.reload();
+      });
+    }
+  } catch (_) {
+    // オフラインや非対応環境でも、端末保存版として通常利用を続ける。
+  }
+}
+registerServiceWorker();
 render();
 scheduleAutoSync();
