@@ -1,9 +1,13 @@
-import { createEmptyState, normalizeRecord, normalizeState, isoNow, uid } from './model.js';
+import {
+  createEmptyState, normalizeRecord, normalizeState, isoNow, uid,
+  inferWishType, inferExperienceType
+} from './model.js';
 
 const ARRAY_ALIASES = {
   records: ['records', 'entries', 'logs', 'mind_logs', 'items', 'current', 'mind', 'insights', 'premises', 'imports'],
-  goals: ['goals', 'mind_goals', 'future'],
+  goals: ['goals', 'mind_goals'],
   habits: ['habits'],
+  wishes: ['wishes', 'future'],
   healthItems: ['healthItems', 'health', 'medical'],
   timeline: ['timeline', 'life_events'],
   comparisons: ['comparisons', 'lifeComparisons'],
@@ -97,10 +101,14 @@ function cleanLegacyRecord(input, target, originalSection, stats) {
     stats.repaired += 1;
     stats.payloadLayersRemoved += recovered.depth;
   }
-  const kind = target.replace(/s$/, '');
+  const kind = target === 'wishes' ? 'wish' : target.replace(/s$/, '');
   const createdAt = isDateTime(row.createdAt) ? row.createdAt : (isDateTime(row.updatedAt) ? row.updatedAt : undefined);
   const updatedAt = isDateTime(row.updatedAt) ? row.updatedAt : createdAt;
   const sourceLink = [row.linkUrl, row.imageUrl, row.createdAt].find(value => typeof value === 'string' && /^https?:\/\//i.test(value)) || '';
+  const wishSource = [row.details?.wishType, row.category, row.title].filter(Boolean).join(' ');
+  const wishType = row.details?.wishType || inferWishType(wishSource);
+  const experienceType = wishType === 'やってみたいこと・挑戦・体験'
+    ? (row.details?.experienceType || inferExperienceType(wishSource)) : row.details?.experienceType;
   return normalizeRecord({
     ...row,
     id: row.id || input.id || uid(`legacy_${kind}`),
@@ -108,11 +116,15 @@ function cleanLegacyRecord(input, target, originalSection, stats) {
     createdAt,
     updatedAt,
     source: 'legacy-json',
+    details: kind === 'wish'
+      ? { ...(row.details || {}), wishType, ...(experienceType ? { experienceType } : {}) }
+      : row.details,
     legacy: {
-      originalSection,
-      originalCategory: row.category || '',
-      sourceLink,
-      repairedPayloadDepth: recovered.depth
+      ...(row.legacy || {}),
+      originalSection: row.legacy?.originalSection || originalSection,
+      originalCategory: row.legacy?.originalCategory || row.category || '',
+      sourceLink: row.legacy?.sourceLink || sourceLink,
+      repairedPayloadDepth: Math.max(Number(row.legacy?.repairedPayloadDepth || 0), recovered.depth)
     }
   }, kind);
 }
@@ -220,6 +232,20 @@ export function inspectLegacyJson(input, currentState = createEmptyState()) {
   for (const [target, aliases] of Object.entries(ARRAY_ALIASES)) {
     const rows = pickArrays(raw, aliases);
     candidate[target] = rows.map(({ row, section }) => cleanLegacyRecord(row, target, section, stats));
+  }
+  const embeddedFutureGoals = candidate.goals.filter(row => row.legacy?.originalSection === 'future');
+  if (embeddedFutureGoals.length) {
+    candidate.goals = candidate.goals.filter(row => row.legacy?.originalSection !== 'future');
+    candidate.wishes.push(...embeddedFutureGoals.map(row => {
+      const category = String(row.legacy?.originalCategory || '');
+      const wishType = inferWishType(category);
+      const experienceType = wishType === 'やってみたいこと・挑戦・体験'
+        ? (row.details?.experienceType || inferExperienceType(category)) : row.details?.experienceType;
+      return normalizeRecord({
+        ...row, kind:'wish',
+        details:{ ...(row.details || {}), wishType, ...(experienceType ? { experienceType } : {}) }
+      }, 'wish');
+    }));
   }
   appendProfileRecords(candidate, profileResult.raw, stats);
   candidate.aiHistory = normalizeAiHistory(Array.isArray(raw.aiHistory) ? raw.aiHistory : [], stats);

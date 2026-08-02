@@ -6,6 +6,7 @@ export function buildContext(state) {
     lifeScore: calculateLifeScore(state), scores: state.scores,
     goals: state.goals.filter(x => !x.deletedAt).slice(-20),
     habits: state.habits.filter(x => !x.deletedAt).slice(-20),
+    wishes: state.wishes.filter(x => !x.deletedAt).slice(-30),
     health: state.healthItems.filter(x => !x.deletedAt).slice(-20),
     recentRecords: state.records.filter(x => !x.deletedAt).slice(-30),
     timeline: state.timeline.filter(x => !x.deletedAt).slice(-40),
@@ -51,7 +52,7 @@ export function buildNotebookMarkdown(state) {
   for (const [k,v] of Object.entries(state.profile)) if (v && !['id','updatedAt'].includes(k)) lines.push(`- ${k}: ${v}`);
   lines.push('', '## 人生レーダー');
   for (const d of DOMAINS) lines.push(`- ${d.label}: ${state.scores[d.id] ?? 50}/100`);
-  const sections = [['目標',state.goals],['習慣',state.habits],['健康',state.healthItems],['人生比較',state.comparisons],['人生タイムライン',state.timeline],['商品・事業',state.products],['定期レビュー',state.reviews],['未来シミュレーション',state.simulations],['記録',state.records]];
+  const sections = [['目標',state.goals],['習慣',state.habits],['夢・楽しみ（欲しいもの・行きたい場所・やってみたいこと／挑戦／体験）',state.wishes],['健康',state.healthItems],['人生比較',state.comparisons],['人生タイムライン',state.timeline],['商品・事業',state.products],['定期レビュー',state.reviews],['未来シミュレーション',state.simulations],['記録',state.records]];
   for (const [label,rows] of sections) {
     lines.push('', `## ${label}`);
     for (const r of rows.filter(x => !x.deletedAt)) {

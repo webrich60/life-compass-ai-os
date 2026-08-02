@@ -96,13 +96,37 @@ export function mergeScores(local, cloud) {
 export function mergeStates(local, cloud) {
   const l = normalizeState(local), c = normalizeState(cloud);
   const out = normalizeState(c);
-  for (const key of ['records','goals','habits','healthItems','timeline','comparisons','products','reviews','simulations']) {
+  for (const key of ['records','goals','habits','wishes','healthItems','timeline','comparisons','products','reviews','simulations']) {
     const map = new Map();
     for (const row of [...c[key], ...l[key]]) map.set(row.id, map.has(row.id) ? newer(row, map.get(row.id)) : row);
     out[key] = [...map.values()];
   }
   out.profile = mergeProfile(l.profile, c.profile);
-  out.settings = { ...c.settings, ...l.settings, gasUrl: l.settings.gasUrl || c.settings.gasUrl };
+  out.settings = {
+    ...c.settings, ...l.settings,
+    gasUrl: l.settings.gasUrl || c.settings.gasUrl,
+    integrations: {
+      ...(c.settings.integrations || {}), ...(l.settings.integrations || {}),
+      line: {
+        ...(c.settings.integrations?.line || {}), ...(l.settings.integrations?.line || {}),
+        scopes: {
+          ...(c.settings.integrations?.line?.scopes || {}),
+          ...(l.settings.integrations?.line?.scopes || {})
+        }
+      },
+      gpt: {
+        ...(c.settings.integrations?.gpt || {}), ...(l.settings.integrations?.gpt || {}),
+        scopes: {
+          ...(c.settings.integrations?.gpt?.scopes || {}),
+          ...(l.settings.integrations?.gpt?.scopes || {})
+        }
+      },
+      cost: {
+        ...(c.settings.integrations?.cost || {}),
+        ...(l.settings.integrations?.cost || {})
+      }
+    }
+  };
   const scoreMerge = mergeScores(l, c);
   out.scores = scoreMerge.scores;
   out.scoreUpdatedAt = scoreMerge.scoreUpdatedAt;

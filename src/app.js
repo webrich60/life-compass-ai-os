@@ -1,5 +1,5 @@
 import {
-  DOMAINS, THEORY_OPTIONS, PERSONAS, createEmptyState, normalizeRecord,
+  DOMAINS, THEORY_OPTIONS, PERSONAS, WISH_TYPES, EXPERIENCE_TYPES, createEmptyState, normalizeRecord,
   calculateLifeScore, todayTasks, isoNow, localDateKey, activeRows, reviewDue
 } from './model.js';
 import {
@@ -8,26 +8,38 @@ import {
 } from './storage.js';
 import { inspectLegacyJson, applyMigration, inspectLegacyJsonBatch, applyMigrationBatch } from './migration.js';
 import { askAI, buildNotebookMarkdown } from './ai.js';
+import {
+  DATA_SCOPE_OPTIONS, buildCloneKnowledgeMarkdown, buildCloneInstructions,
+  buildActionsOpenApiTemplate, estimateGeminiCost
+} from './integrations.js';
 
 const PAGES = [
   ['home','⌂','ホーム'], ['life','◎','人生設計'], ['health','♡','健康'],
   ['work','▣','仕事・収入'], ['timeline','⌁','タイムライン'], ['reviews','◷','定期レビュー'],
-  ['ai','✦','AI伴走'], ['data','⇄','連携・移行'], ['profile','♙','プロフィール']
+  ['ai','✦','AI伴走'], ['integrations','⌬','AI連携'], ['data','⇄','連携・移行'], ['profile','♙','プロフィール']
 ];
 const EXTRA_PAGES = ['settings','search'];
 const MOBILE = ['home','life','health','ai','data'];
 const COLLECTIONS = {
   record:'records', goal:'goals', habit:'habits', healthItem:'healthItems',
-  timeline:'timeline', comparison:'comparisons', product:'products', review:'reviews', simulation:'simulations'
+  wish:'wishes', timeline:'timeline', comparison:'comparisons', product:'products', review:'reviews', simulation:'simulations'
 };
 const KIND_LABELS = {
   record:'日々の記録', goal:'目標', habit:'習慣', healthItem:'健康項目', timeline:'人生の出来事',
-  comparison:'人生比較', product:'商品・事業の種', review:'定期レビュー', simulation:'未来シミュレーション'
+  wish:'夢・楽しみ', comparison:'人生比較', product:'商品・事業の種', review:'定期レビュー', simulation:'未来シミュレーション'
 };
 const DETAIL_FIELDS = {
   record:[['mood','気分（任意）','text'],['energy','エネルギー 0〜100','number']],
   goal:[['dueDate','期限','date'],['priority','優先度','select','高|中|低'],['progress','進捗 0〜100','number']],
   habit:[['frequency','頻度','select','毎日|週1回|週2回|週3回|平日|自由設定'],['target','続ける基準','text']],
+  wish:[
+    ['wishType','種類','select',WISH_TYPES.join('|')],
+    ['experienceType','挑戦・体験の種類（該当するとき）','select',`|${EXPERIENCE_TYPES.join('|')}`],
+    ['targetDate','実現したい時期','date'],
+    ['priority','優先度','select','高|中|低'],['budget','予算の目安','text'],
+    ['wishStatus','実現状況','select','いつか|検討中|計画中|実現済み'],['reason','実現したい理由','textarea'],
+    ['firstStep','最初の一歩','textarea'],['companion','一緒に実現したい人（任意）','text']
+  ],
   healthItem:[
     ['history','既往歴・これまで','textarea'],['current','現在の状態','textarea'],['ideal','理想状態','textarea'],
     ['improvements','考えられる改善方法','textarea'],['firstStep','まずやること','textarea'],
@@ -184,16 +196,21 @@ function renderHome() {
     <div class="grid grid-2"><div class="card">${tasks.length?tasks.map(taskHtml).join(''):`<div class="empty">今日の予定はまだありません<br><button class="btn secondary" data-action="new-record" data-kind="goal">目標を追加</button></div>`}</div>
     <div class="card ai-box"><span class="badge blue">AI COMPASS</span><h2>今日の問い</h2><p>いま一番変えると、人生全体に良い影響が広がるものは何か？</p><button class="btn" data-action="quick-ai">横断分析する</button>${lastAI?`<p class="ai-result">${esc(lastAI.answer).slice(0,340)}${lastAI.answer.length>340?'…':''}</p>`:'<div class="empty">最初の横断分析を行うと、ここに要点が表示されます。</div>'}</div></div>
     ${sectionHead('すぐに記録')}
-    <div class="quick-actions"><button class="quick" data-action="new-record" data-kind="record"><b>＋ 日々の記録</b><small>気づき・感情・出来事</small></button><button class="quick" data-action="new-record" data-kind="healthItem"><b>＋ 健康</b><small>症状・通院・測定</small></button><button class="quick" data-action="new-record" data-kind="goal"><b>＋ 目標</b><small>理想への次の一歩</small></button><button class="quick" data-action="new-record" data-kind="product"><b>＋ 商品・事業</b><small>WEBRICHの種</small></button></div>
+    <div class="quick-actions"><button class="quick" data-action="new-record" data-kind="record"><b>＋ 日々の記録</b><small>気づき・感情・出来事</small></button><button class="quick" data-action="new-record" data-kind="healthItem"><b>＋ 健康</b><small>症状・通院・測定</small></button><button class="quick" data-action="new-record" data-kind="goal"><b>＋ 目標</b><small>理想への次の一歩</small></button><button class="quick" data-action="new-record" data-kind="wish"><b>＋ 夢・楽しみ</b><small>もの・場所・挑戦・体験</small></button><button class="quick" data-action="new-record" data-kind="product"><b>＋ 商品・事業</b><small>WEBRICHの種</small></button></div>
   </div>`;
 }
 
 function renderLife() {
+  const wantedItems = activeRows(state.wishes).filter(row => (row.details?.wishType || '欲しいもの') === '欲しいもの');
+  const wantedPlaces = activeRows(state.wishes).filter(row => row.details?.wishType === '行きたい場所');
+  const wantedExperiences = activeRows(state.wishes).filter(row => row.details?.wishType === 'やってみたいこと・挑戦・体験');
   return `<div class="page-enter">${sectionHead('人生レーダー','点数は評価ではなく、今の位置と変化を見つける目印です。','<button class="btn" data-action="save-scores">点数を保存</button>')}
   <div class="card radar-wrap">${radarSvg()}<div class="score-editor">${DOMAINS.map(domain=>`<div class="score-row"><label>${domain.label}</label><input type="range" min="0" max="100" value="${state.scores[domain.id]}" data-score="${domain.id}"><output>${state.scores[domain.id]}</output></div>`).join('')}</div></div>
   ${sectionHead('理想との比較','過去の理想 → 現在 → 新しい理想を専用項目で整理','<button class="btn secondary" data-action="new-record" data-kind="comparison">＋ 比較を追加</button>')}${recordList(state.comparisons,'comparison')}
   ${sectionHead('目標と習慣','期限・進捗・頻度まで管理','<div class="btn-row"><button class="btn secondary" data-action="new-record" data-kind="goal">＋ 目標</button><button class="btn secondary" data-action="new-record" data-kind="habit">＋ 習慣</button></div>')}
-  <div class="grid grid-2"><div class="card"><h3>目標</h3>${activeRows(state.goals).map(taskHtml).join('')||'<div class="empty">目標はまだありません</div>'}</div><div class="card"><h3>習慣</h3>${activeRows(state.habits).map(taskHtml).join('')||'<div class="empty">習慣はまだありません</div>'}</div></div></div>`;
+  <div class="grid grid-2"><div class="card"><h3>目標</h3>${activeRows(state.goals).map(taskHtml).join('')||'<div class="empty">目標はまだありません</div>'}</div><div class="card"><h3>習慣</h3>${activeRows(state.habits).map(taskHtml).join('')||'<div class="empty">習慣はまだありません</div>'}</div></div>
+  ${sectionHead('夢・楽しみ','達成義務ではなく、これから叶えたいことを集める場所です。','<button class="btn secondary" data-action="new-record" data-kind="wish">＋ 夢・楽しみを追加</button>')}
+  <div class="grid grid-3 wish-grid"><section class="wish-group"><h3>欲しいもの</h3><p>手に入れたい物や暮らしの道具</p>${wantedItems.length?`<div class="record-list">${wantedItems.map(row=>recordCard(row,'wish')).join('')}</div>`:'<div class="empty">欲しいものはまだありません</div>'}</section><section class="wish-group"><h3>行きたい場所</h3><p>旅先、店、施設、訪れたい地域</p>${wantedPlaces.length?`<div class="record-list">${wantedPlaces.map(row=>recordCard(row,'wish')).join('')}</div>`:'<div class="empty">行きたい場所はまだありません</div>'}</section><section class="wish-group"><h3>やってみたいこと・挑戦・体験</h3><p>成長のための挑戦から、純粋に楽しむ体験まで</p>${wantedExperiences.length?`<div class="record-list">${wantedExperiences.map(row=>recordCard(row,'wish')).join('')}</div>`:'<div class="empty">やってみたいことはまだありません</div>'}</section></div></div>`;
 }
 
 function renderHealth() {
@@ -242,13 +259,66 @@ function renderProfile() {
 function renderData() {
   const synced = Boolean(state.meta.lastSyncedAt);
   const trash = allRows({deleted:true});
-  const counts = [['記録',state.records],['目標',state.goals],['習慣',state.habits],['健康',state.healthItems],['タイムライン',state.timeline],['人生比較',state.comparisons],['商品',state.products],['レビュー',state.reviews],['シミュレーション',state.simulations]];
+  const counts = [['記録',state.records],['目標',state.goals],['習慣',state.habits],['夢・楽しみ',state.wishes],['健康',state.healthItems],['タイムライン',state.timeline],['人生比較',state.comparisons],['商品',state.products],['レビュー',state.reviews],['シミュレーション',state.simulations]];
   return `<div class="page-enter"><div class="grid grid-2"><section class="card"><h2>クラウド同期</h2><div class="status-panel"><span class="status-dot ${synced?'ok':'warn'}"></span><div><b>${synced?'同期済み':'初回同期前'}</b><small style="display:block;color:var(--muted)">${synced?new Date(state.meta.lastSyncedAt).toLocaleString('ja-JP'):'設定で接続情報を登録してください'}</small></div></div><p>Google Sheetsを正本として、プロフィールも点数も項目単位で安全に統合します。</p><div class="btn-row"><button class="btn" data-action="sync">今すぐ同期</button><button class="btn ghost" data-action="test-connection">接続テスト</button></div></section>
   <section class="card"><h2>JSONバックアップ</h2><p>全データを手元に保存します。復元や端末移行に使えます。</p><div class="btn-row"><button class="btn secondary" data-action="export-json">JSONを書き出す</button><button class="btn ghost" data-action="import-json">旧JSONを比較・統合</button></div></section></div>
   ${sectionHead('外部連携','同じ人生データを目的別に再利用')}
-  <div class="quick-actions"><button class="quick" data-action="export-notebook"><b>NotebookLM</b><small>人生データを資料化</small></button><button class="quick" data-action="export-story"><b>Story Studio</b><small>人生資産を書き出す</small></button><button class="quick" data-action="export-product"><b>商品設計</b><small>経験を商品へ送る</small></button><button class="quick" data-action="export-kotka"><b>KOTKA AI経営OS</b><small>事業データを書き出す</small></button></div>
+  <div class="quick-actions"><button class="quick" data-page="integrations"><b>LINE・相棒専用GPT</b><small>AI連携センターを開く</small></button><button class="quick" data-action="export-notebook"><b>NotebookLM</b><small>人生データを資料化</small></button><button class="quick" data-action="export-story"><b>Story Studio</b><small>人生資産を書き出す</small></button><button class="quick" data-action="export-product"><b>商品設計</b><small>経験を商品へ送る</small></button><button class="quick" data-action="export-kotka"><b>KOTKA AI経営OS</b><small>事業データを書き出す</small></button></div>
   ${sectionHead('データ内訳','現在この端末にある有効データ')}<div class="grid grid-3">${counts.map(([label,rows])=>`<div class="card metric-card"><span class="metric-icon">${activeRows(rows).length}</span><div><small>登録件数</small><b>${label}</b></div></div>`).join('')}</div>
   ${trash.length?`${sectionHead('最近削除したデータ','同期のため削除履歴を保持しています。必要なら復元できます。')}<div class="record-list">${trash.slice(-10).reverse().map(row=>`<article class="record"><span class="record-date">削除済み</span><div><span class="badge red">${esc(KIND_LABELS[row.kind]||row.kind)}</span><h3>${esc(row.title)}</h3></div><div class="record-actions"><button class="btn small secondary" data-action="restore-record" data-kind="${esc(row.kind)}" data-id="${esc(row.id)}">復元</button></div></article>`).join('')}</div>`:''}</div>`;
+}
+
+function scopeGrid(channel) {
+  const scopes = state.settings.integrations[channel].scopes;
+  return `<div class="scope-grid">${DATA_SCOPE_OPTIONS.map(option => {
+    const sensitive = ['reviews','health','family','location','finance','aiHistory'].includes(option.id);
+    return `<label class="scope-card ${sensitive?'sensitive':''}"><input type="checkbox" data-integration-scope="${channel}" value="${option.id}" ${scopes[option.id]?'checked':''}><span><b>${esc(option.label)}</b><small>${esc(option.description)}</small></span>${sensitive?'<i>慎重</i>':''}</label>`;
+  }).join('')}</div>`;
+}
+
+function yen(value) { return `約${Math.round(Number(value || 0)).toLocaleString('ja-JP')}円`; }
+
+function renderIntegrations() {
+  const integrations = state.settings.integrations;
+  const line = integrations.line;
+  const gpt = integrations.gpt;
+  const cost = estimateGeminiCost(integrations.cost);
+  return `<div class="page-enter integrations-page">
+    <div class="hero integration-hero"><div class="hero-grid"><div><span class="badge">AI CONNECTION CENTER</span><h2>普段はGemini、深い相談は相棒専用GPTへ。</h2><p>Life Compassを記憶の正本として残し、LINEとChatGPT Plusには許可した情報だけを渡します。未接続の間は既存機能へ影響しません。</p></div><div class="life-score">⌬<small>CONNECT</small></div></div></div>
+
+    ${sectionHead('おすすめの使い分け','月額負担を抑えながら、簡単な相談と高度な分析を分担')}
+    <div class="grid grid-3 strategy-grid">
+      <article class="card strategy-card"><span class="badge blue">日常</span><h3>公式LINE＋Gemini</h3><p>短い質問、記録、今日の優先順位。1日10回を標準にします。</p></article>
+      <article class="card strategy-card"><span class="badge">高度</span><h3>ChatGPT Plusの非公開GPT</h3><p>人生全体、事業、重要判断。Plusの月額内で使う前提です。</p></article>
+      <article class="card strategy-card"><span class="badge done">正本</span><h3>Life Compass</h3><p>Google Sheetsの最新データを正本にし、丸ごと外部へ渡しません。</p></article>
+    </div>
+
+    ${sectionHead('公式LINE連携','今は土台だけ保存できます。実際の接続時にLINEトークンと安全な受信サーバーを設定します。')}
+    <section class="card integration-card">
+      <div class="integration-title"><div><span class="status-dot ${line.connected?'ok':'warn'}"></span><div><h3>相棒専用LINE伴走ボット</h3><p>${line.connected?'接続済み':'未接続・Life Compass単体で通常利用できます'}</p></div></div><label class="switch"><input id="lineEnabled" type="checkbox" ${line.enabled?'checked':''}><span></span><b>${line.enabled?'準備ON':'準備OFF'}</b></label></div>
+      <div class="form-grid compact-grid"><div class="field"><label>通常回答AI</label><select id="lineProvider"><option value="gemini" selected>Gemini 2.5 Flash</option></select></div><div class="field"><label>1日あたりの上限</label><input id="lineDailyLimit" type="number" min="1" max="100" value="${Number(line.dailyLimit||10)}"></div></div>
+      <div class="toggle-row"><label class="toggle-card"><input id="lineSaveHistory" type="checkbox" ${line.saveHistory?'checked':''}> LINE会話をLife Compassへ保存</label><label class="toggle-card"><input id="lineOwnerOnly" type="checkbox" ${line.ownerOnly?'checked':''}> 相棒のLINEユーザーIDだけ許可</label></div>
+      <h4>LINEへ渡してよいデータ</h4>${scopeGrid('line')}
+    </section>
+
+    ${sectionHead('相棒専用GPT','知識ファイルと指示文を作成し、将来はGPT Actionsで最新データを取得')}
+    <section class="card integration-card">
+      <div class="integration-title"><div><span class="status-dot ${gpt.connected?'ok':'warn'}"></span><div><h3>ChatGPT Plus｜非公開GPT</h3><p>${gpt.connected?'登録済み':'未登録・まず知識パッケージを書き出せます'}</p></div></div><label class="switch"><input id="gptEnabled" type="checkbox" ${gpt.enabled?'checked':''}><span></span><b>${gpt.enabled?'利用ON':'利用OFF'}</b></label></div>
+      <div class="form-grid compact-grid"><div class="field full"><label>作成した相棒専用GPTのURL（後から入力）</label><input id="gptUrl" type="url" value="${esc(gpt.gptUrl||'')}" placeholder="https://chatgpt.com/g/..."></div></div>
+      <label class="toggle-card"><input id="gptUseActions" type="checkbox" ${gpt.useActions?'checked':''}> GPT ActionsでLife Compassの最新データを参照する（接続設定後）</label>
+      <div class="privacy-notice"><b>非公開が前提です</b><p>振り返り・健康・家族・住所・金銭・AI履歴は初期状態でOFFです。必要な項目だけ自分で許可してください。</p></div>
+      <h4>非公開GPTへ渡してよいデータ</h4>${scopeGrid('gpt')}
+      <div class="btn-row integration-actions"><button class="btn" data-action="export-gpt-knowledge">① 知識ファイル</button><button class="btn secondary" data-action="export-gpt-instructions">② GPT指示文</button><button class="btn ghost" data-action="export-gpt-actions">③ Actionsひな形</button><button class="btn ghost" data-action="open-private-gpt">ChatGPTで深く相談</button></div>
+      <p class="fine-print">Actionsひな形には同期トークンやAPIキーを含めません。実接続時はFirebase Functions等の安全な中継先を設定します。</p>
+    </section>
+
+    ${sectionHead('AI利用回数・概算費用','Gemini 2.5 Flash有料APIの参考単価。実際の請求はトークン数・為替で変わります。')}
+    <section class="card cost-card"><div class="form-grid cost-inputs"><div class="field"><label>1日の質問回数</label><input id="costQuestions" type="number" min="0" max="1000" value="${integrations.cost.questionsPerDay}"></div><div class="field"><label>1回の入力トークン</label><input id="costInputTokens" type="number" min="0" step="100" value="${integrations.cost.inputTokens}"></div><div class="field"><label>1回の回答トークン</label><input id="costOutputTokens" type="number" min="0" step="100" value="${integrations.cost.outputTokens}"></div><div class="field"><label>1ドル（円）</label><input id="costUsdJpy" type="number" min="1" value="${integrations.cost.usdJpy}"></div></div>
+      <div class="grid grid-4 cost-results" id="costResults"><div class="metric-card card"><div><small>Gemini／1日</small><b>${yen(cost.dailyYen)}</b></div></div><div class="metric-card card"><div><small>Gemini／1か月</small><b>${yen(cost.monthlyYen)}</b></div></div><div class="metric-card card"><div><small>Gemini／1年</small><b>${yen(cost.yearlyYen)}</b></div></div><div class="metric-card card"><div><small>月間質問数</small><b>${cost.monthlyQuestions.toLocaleString('ja-JP')}回</b></div></div></div>
+      <p class="cost-summary">ChatGPTの高度な相談はPlus内の非公開GPTで行うため、OpenAI APIの従量料金はこの試算に含めません。</p>
+    </section>
+    <div class="sticky-save"><button class="btn" data-action="save-integrations">AI連携設定を保存</button></div>
+  </div>`;
 }
 
 function renderSettings() {
@@ -258,7 +328,7 @@ function renderSettings() {
 }
 
 function renderSearch() {
-  return `<div class="page-enter"><div class="search-box"><input id="globalSearch" type="search" placeholder="記録・健康・目標・商品などを検索" autocomplete="off"></div><div class="filter-row"><button class="filter-chip active" data-search-kind="all">すべて</button>${Object.entries(KIND_LABELS).map(([kind,label])=>`<button class="filter-chip" data-search-kind="${kind}">${label}</button>`).join('')}</div>${sectionHead('検索結果','入力すると全データから探します。')}<div id="searchResults" class="record-list"><div class="empty">検索語を入力してください</div></div></div>`;
+  return `<div class="page-enter"><div class="search-box"><input id="globalSearch" type="search" placeholder="記録・健康・目標・夢・行きたい場所・挑戦・体験などを検索" autocomplete="off"></div><div class="filter-row"><button class="filter-chip active" data-search-kind="all">すべて</button>${Object.entries(KIND_LABELS).map(([kind,label])=>`<button class="filter-chip" data-search-kind="${kind}">${label}</button>`).join('')}</div>${sectionHead('検索結果','入力すると全データから探します。')}<div id="searchResults" class="record-list"><div class="empty">検索語を入力してください</div></div></div>`;
 }
 
 function recordList(rows, kind, wrap = true) {
@@ -271,12 +341,12 @@ function recordCard(row, fallbackKind) {
   const kind = row.kind || fallbackKind;
   const progress = kind === 'goal' && row.details?.progress !== undefined ? Number(row.details.progress) : null;
   const attachments = Array.isArray(row.details?.attachments) ? row.details.attachments : [];
-  return `<article class="record"><span class="record-date">${displayDate(row.date)}</span><div><span class="badge">${esc(domainLabel(row.domain))}</span><h3>${esc(row.title)}</h3><p>${esc(row.body)}</p>${progress!==null?`<div class="progress" title="進捗 ${progress}%"><i style="width:${Math.max(0,Math.min(100,progress))}%"></i></div>`:''}<div class="record-meta">${row.details?.priority?`<span class="badge ${row.details.priority==='高'?'warn':''}">優先度 ${esc(row.details.priority)}</span>`:''}${row.details?.frequency?`<span class="badge">${esc(row.details.frequency)}</span>`:''}</div>${attachments.map(file=>`<a class="attachment-link" href="${esc(file.url)}" target="_blank" rel="noopener">添付：${esc(file.name)}</a>`).join('')}</div><div class="record-actions"><button class="btn small ghost" data-action="view-record" data-kind="${esc(kind)}" data-id="${esc(row.id)}">見る</button><button class="btn small ghost" data-action="edit-record" data-kind="${esc(kind)}" data-id="${esc(row.id)}">編集</button><button class="btn small danger" data-action="delete-record" data-kind="${esc(kind)}" data-id="${esc(row.id)}">削除</button></div></article>`;
+  return `<article class="record"><span class="record-date">${displayDate(row.date)}</span><div><span class="badge">${esc(domainLabel(row.domain))}</span><h3>${esc(row.title)}</h3><p>${esc(row.body)}</p>${progress!==null?`<div class="progress" title="進捗 ${progress}%"><i style="width:${Math.max(0,Math.min(100,progress))}%"></i></div>`:''}<div class="record-meta">${row.details?.wishType?`<span class="badge blue">${esc(row.details.wishType)}</span>`:''}${row.details?.experienceType?`<span class="badge">${esc(row.details.experienceType)}</span>`:''}${row.details?.wishStatus?`<span class="badge ${row.details.wishStatus==='実現済み'?'done':''}">${esc(row.details.wishStatus)}</span>`:''}${row.details?.priority?`<span class="badge ${row.details.priority==='高'?'warn':''}">優先度 ${esc(row.details.priority)}</span>`:''}${row.details?.frequency?`<span class="badge">${esc(row.details.frequency)}</span>`:''}${row.details?.budget?`<span class="badge">予算 ${esc(row.details.budget)}</span>`:''}</div>${attachments.map(file=>`<a class="attachment-link" href="${esc(file.url)}" target="_blank" rel="noopener">添付：${esc(file.name)}</a>`).join('')}</div><div class="record-actions"><button class="btn small ghost" data-action="view-record" data-kind="${esc(kind)}" data-id="${esc(row.id)}">見る</button><button class="btn small ghost" data-action="edit-record" data-kind="${esc(kind)}" data-id="${esc(row.id)}">編集</button><button class="btn small danger" data-action="delete-record" data-kind="${esc(kind)}" data-id="${esc(row.id)}">削除</button></div></article>`;
 }
 
 function render() {
   updateChrome();
-  const views = {home:renderHome,life:renderLife,health:renderHealth,work:renderWork,timeline:renderTimeline,reviews:renderReviews,ai:renderAI,data:renderData,profile:renderProfile,settings:renderSettings,search:renderSearch};
+  const views = {home:renderHome,life:renderLife,health:renderHealth,work:renderWork,timeline:renderTimeline,reviews:renderReviews,ai:renderAI,integrations:renderIntegrations,data:renderData,profile:renderProfile,settings:renderSettings,search:renderSearch};
   $('#app').innerHTML = (views[page] || renderHome)();
   bindPage();
 }
@@ -300,13 +370,14 @@ function bindPage() {
     document.querySelectorAll('[data-search-kind]').forEach(item=>item.classList.toggle('active',item===button));
     updateSearchResults();
   }));
+  document.querySelectorAll('#costQuestions,#costInputTokens,#costOutputTokens,#costUsdJpy').forEach(input => input.addEventListener('input', updateCostPreview));
 }
 
 function detailFieldHtml(kind, details = {}) {
   return (DETAIL_FIELDS[kind] || []).map(([key,label,type,options]) => {
     const value = details[key] ?? '';
     if (type === 'textarea') return `<div class="field full"><label>${label}</label><textarea name="detail__${key}">${esc(value)}</textarea></div>`;
-    if (type === 'select') return `<div class="field"><label>${label}</label><select name="detail__${key}">${String(options).split('|').map(option=>`<option value="${esc(option)}" ${String(value)===option?'selected':''}>${option==='weekly'?'週間':option==='monthly'?'月間':option==='yearly'?'年間':esc(option)}</option>`).join('')}</select></div>`;
+    if (type === 'select') return `<div class="field"><label>${label}</label><select name="detail__${key}">${String(options).split('|').map(option=>`<option value="${esc(option)}" ${String(value)===option?'selected':''}>${option===''?'選択してください':option==='weekly'?'週間':option==='monthly'?'月間':option==='yearly'?'年間':esc(option)}</option>`).join('')}</select></div>`;
     return `<div class="field"><label>${label}</label><input name="detail__${key}" type="${type}" value="${esc(value)}" ${type==='number'?'min="0" max="100"':''}></div>`;
   }).join('');
 }
@@ -316,9 +387,22 @@ function openRecordDialog(kind, id = '') {
   if (!key) return toast('未対応の記録種類です','error');
   const existing = id ? state[key].find(row => row.id === id) : null;
   const dialog = $('#recordDialog');
-  dialog.innerHTML = `<form id="recordForm"><div class="modal-head"><div><span class="badge">${existing?'編集':'新規'}</span><h2>${esc(KIND_LABELS[kind])}</h2></div><button class="icon-btn" type="button" data-close>×</button></div><div class="modal-body form-grid"><input type="hidden" name="kind" value="${kind}"><div class="field"><label>日付</label><input name="date" type="date" value="${esc(existing?.date || localDateKey())}" required></div><div class="field"><label>分野</label><select name="domain">${DOMAINS.map(domain=>`<option value="${domain.id}" ${(existing?.domain || defaultDomain(kind))===domain.id?'selected':''}>${domain.label}</option>`).join('')}</select></div><div class="field full"><label>タイトル</label><input name="title" value="${esc(existing?.title || '')}" required placeholder="例：朝の血圧、今月の目標、事業アイデア"></div><div class="field full"><label>概要・自由メモ</label><textarea name="body" placeholder="事実や気づきを自由に書いてください">${esc(existing?.body || '')}</textarea></div>${detailFieldHtml(kind,existing?.details)}<div class="field full"><label>タグ</label><input name="tags" value="${esc((existing?.tags||[]).join('、'))}" placeholder="健康、挑戦、家族 など"></div><div class="field full"><label>画像・添付（任意・8MB以下）</label><input name="attachment" type="file"><span class="hint">添付はGoogle Driveへ保存します。同期設定が必要です。</span></div><p class="mobile-sheet-note field full">下へスクロールすると保存ボタンがあります。</p></div><div class="modal-actions"><button class="btn ghost" type="button" data-close>キャンセル</button><button class="btn" type="submit">${existing?'更新する':'保存する'}</button></div></form>`;
+  const titlePlaceholder = kind === 'wish' ? '例：キャンピングカー、北海道旅行、Kindle出版' : '例：朝の血圧、今月の目標、事業アイデア';
+  const bodyPlaceholder = kind === 'wish' ? '欲しいもの・場所・挑戦・体験と、叶えたいイメージを自由に書いてください' : '事実や気づきを自由に書いてください';
+  dialog.innerHTML = `<form id="recordForm"><div class="modal-head"><div><span class="badge">${existing?'編集':'新規'}</span><h2>${esc(KIND_LABELS[kind])}</h2></div><button class="icon-btn" type="button" data-close>×</button></div><div class="modal-body form-grid"><input type="hidden" name="kind" value="${kind}"><div class="field"><label>日付</label><input name="date" type="date" value="${esc(existing?.date || localDateKey())}" required></div><div class="field"><label>関連する分野</label><select name="domain">${DOMAINS.map(domain=>`<option value="${domain.id}" ${(existing?.domain || defaultDomain(kind))===domain.id?'selected':''}>${domain.label}</option>`).join('')}</select></div><div class="field full"><label>タイトル</label><input name="title" value="${esc(existing?.title || '')}" required placeholder="${titlePlaceholder}"></div><div class="field full"><label>概要・自由メモ</label><textarea name="body" placeholder="${bodyPlaceholder}">${esc(existing?.body || '')}</textarea></div>${detailFieldHtml(kind,existing?.details)}<div class="field full"><label>タグ</label><input name="tags" value="${esc((existing?.tags||[]).join('、'))}" placeholder="健康、挑戦、家族 など"></div><div class="field full"><label>画像・添付（任意・8MB以下）</label><input name="attachment" type="file"><span class="hint">添付はGoogle Driveへ保存します。同期設定が必要です。</span></div><p class="mobile-sheet-note field full">下へスクロールすると保存ボタンがあります。</p></div><div class="modal-actions"><button class="btn ghost" type="button" data-close>キャンセル</button><button class="btn" type="submit">${existing?'更新する':'保存する'}</button></div></form>`;
   dialog.showModal();
   dialog.querySelectorAll('[data-close]').forEach(button => button.onclick=()=>dialog.close());
+  if (kind === 'wish') {
+    const typeSelect = dialog.querySelector('[name="detail__wishType"]');
+    const subtypeSelect = dialog.querySelector('[name="detail__experienceType"]');
+    const updateSubtypeVisibility = () => {
+      const applies = typeSelect.value === 'やってみたいこと・挑戦・体験';
+      subtypeSelect.closest('.field').hidden = !applies;
+      if (!applies) subtypeSelect.value = '';
+    };
+    typeSelect.addEventListener('change', updateSubtypeVisibility);
+    updateSubtypeVisibility();
+  }
   $('#recordForm').addEventListener('submit', async event => {
     event.preventDefault();
     const submit = event.submitter;
@@ -327,6 +411,7 @@ function openRecordDialog(kind, id = '') {
     const raw = Object.fromEntries(new FormData(form));
     const details = {...(existing?.details || {})};
     for (const [name,value] of Object.entries(raw)) if (name.startsWith('detail__')) details[name.slice(8)] = value;
+    if (kind === 'wish' && details.wishType !== 'やってみたいこと・挑戦・体験') delete details.experienceType;
     const base = {...(existing || {}),date:raw.date,domain:raw.domain,title:raw.title,body:raw.body,tags:raw.tags,details,updatedAt:isoNow()};
     const record = normalizeRecord(base,kind);
     if (existing) state[key][state[key].findIndex(row=>row.id===id)] = record;
@@ -350,6 +435,7 @@ function defaultDomain(kind) {
   if (kind === 'healthItem') return 'health';
   if (kind === 'product') return 'work';
   if (kind === 'goal') return 'challenge';
+  if (kind === 'wish') return 'freedom';
   return 'happiness';
 }
 
@@ -363,6 +449,72 @@ function showRecord(kind,id) {
   dialog.showModal();
   dialog.querySelectorAll('[data-close]').forEach(button=>button.onclick=()=>dialog.close());
   dialog.querySelector('[data-action="edit-from-detail"]').onclick=()=>{dialog.close();openRecordDialog(kind,id)};
+}
+
+function currentScopes(channel) {
+  const inputs = [...document.querySelectorAll(`[data-integration-scope="${channel}"]`)];
+  if (!inputs.length) return { ...state.settings.integrations[channel].scopes };
+  return Object.fromEntries(DATA_SCOPE_OPTIONS.map(option => [
+    option.id, Boolean(inputs.find(input => input.value === option.id)?.checked)
+  ]));
+}
+
+function currentCostConfig() {
+  const saved = state.settings.integrations.cost;
+  return {
+    ...saved,
+    questionsPerDay: Number($('#costQuestions')?.value ?? saved.questionsPerDay),
+    inputTokens: Number($('#costInputTokens')?.value ?? saved.inputTokens),
+    outputTokens: Number($('#costOutputTokens')?.value ?? saved.outputTokens),
+    usdJpy: Number($('#costUsdJpy')?.value ?? saved.usdJpy)
+  };
+}
+
+function updateCostPreview() {
+  const target = $('#costResults');
+  if (!target) return;
+  const cost = estimateGeminiCost(currentCostConfig());
+  target.innerHTML = `<div class="metric-card card"><div><small>Gemini／1日</small><b>${yen(cost.dailyYen)}</b></div></div><div class="metric-card card"><div><small>Gemini／1か月</small><b>${yen(cost.monthlyYen)}</b></div></div><div class="metric-card card"><div><small>Gemini／1年</small><b>${yen(cost.yearlyYen)}</b></div></div><div class="metric-card card"><div><small>月間質問数</small><b>${cost.monthlyQuestions.toLocaleString('ja-JP')}回</b></div></div>`;
+}
+
+function saveIntegrationSettings({ message = 'AI連携設定を保存しました', rerender = true } = {}) {
+  const integrations = state.settings.integrations;
+  integrations.line = {
+    ...integrations.line,
+    enabled: Boolean($('#lineEnabled')?.checked),
+    provider: 'gemini',
+    dailyLimit: Math.max(1, Math.min(100, Number($('#lineDailyLimit')?.value || 10))),
+    saveHistory: Boolean($('#lineSaveHistory')?.checked),
+    ownerOnly: Boolean($('#lineOwnerOnly')?.checked),
+    scopes: currentScopes('line')
+  };
+  const gptUrl = $('#gptUrl')?.value.trim() || '';
+  integrations.gpt = {
+    ...integrations.gpt,
+    enabled: Boolean($('#gptEnabled')?.checked),
+    connected: /^https:\/\/chatgpt\.com\//i.test(gptUrl),
+    useActions: Boolean($('#gptUseActions')?.checked),
+    gptUrl,
+    scopes: currentScopes('gpt')
+  };
+  integrations.cost = currentCostConfig();
+  commit(state, message, { autoSync: true, rerender });
+}
+
+function exportGptArtifact(type) {
+  const scopes = currentScopes('gpt');
+  if (type === 'knowledge') {
+    const text = buildCloneKnowledgeMarkdown(state, scopes);
+    downloadBlob(new Blob([text], { type:'text/markdown;charset=utf-8' }), `LifeCompass_PrivateGPT_Knowledge_${dateStamp()}.md`);
+    toast('相棒専用GPTの知識ファイルを書き出しました');
+  } else if (type === 'instructions') {
+    downloadBlob(new Blob([buildCloneInstructions()], { type:'text/plain;charset=utf-8' }), `LifeCompass_PrivateGPT_Instructions_${dateStamp()}.txt`);
+    toast('GPTへ貼り付ける指示文を書き出しました');
+  } else {
+    const text = JSON.stringify(buildActionsOpenApiTemplate(), null, 2);
+    downloadBlob(new Blob([text], { type:'application/json;charset=utf-8' }), `LifeCompass_GPT_Actions_Template_${dateStamp()}.json`);
+    toast('秘密情報を含まないActionsひな形を書き出しました');
+  }
 }
 
 async function handleAction(action, element) {
@@ -397,6 +549,15 @@ async function handleAction(action, element) {
       const token = $('#syncToken')?.value.trim() || state.settings.syncToken;
       element.disabled=true;element.textContent='確認中…';
       const result=await testConnection(url,token);toast(`接続できました（クラウド版 ${result.revision}）`);element.disabled=false;element.textContent='接続テスト';return;
+    }
+    if (action === 'save-integrations') return saveIntegrationSettings();
+    if (action === 'export-gpt-knowledge') return exportGptArtifact('knowledge');
+    if (action === 'export-gpt-instructions') return exportGptArtifact('instructions');
+    if (action === 'export-gpt-actions') return exportGptArtifact('actions');
+    if (action === 'open-private-gpt') {
+      const url = ($('#gptUrl')?.value.trim() || state.settings.integrations.gpt.gptUrl || 'https://chatgpt.com/gpts');
+      if (!/^https:\/\/chatgpt\.com\//i.test(url)) throw new Error('ChatGPTの正しいGPT URLを入力してください');
+      window.open(url, '_blank', 'noopener,noreferrer'); return;
     }
     if (action === 'export-json') { downloadBlob(exportBackup(state),`LifeCompassAIOS_backup_${dateStamp()}.json`);toast('JSONバックアップを書き出しました');return; }
     if (action === 'import-json') return $('#jsonFile').click();

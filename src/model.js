@@ -1,4 +1,34 @@
-export const SCHEMA_VERSION = 2;
+export const SCHEMA_VERSION = 4;
+
+export const DEFAULT_DATA_SCOPES = {
+  basicProfile: true, values: true, work: true, goals: true, habits: true,
+  wishes: true, scores: true, recentRecords: true, timeline: true,
+  products: true, reviews: false, health: false, family: false,
+  location: false, finance: false, aiHistory: false
+};
+
+export const DEFAULT_LINE_SCOPES = {
+  ...DEFAULT_DATA_SCOPES, timeline: false, products: false, reviews: false
+};
+
+export const WISH_TYPES = ['欲しいもの', '行きたい場所', 'やってみたいこと・挑戦・体験'];
+export const EXPERIENCE_TYPES = ['挑戦・成長', '趣味・体験', '人生で一度は'];
+
+export function inferWishType(value = '') {
+  const text = String(value).toLowerCase();
+  if (/行きたい|場所|旅行|旅先|travel|trip/.test(text)) return '行きたい場所';
+  if (/やりたい|してみたい|挑戦|体験|経験|一度は|会いたい|叶えたい|夢|challenge|experience/.test(text)) {
+    return 'やってみたいこと・挑戦・体験';
+  }
+  return '欲しいもの';
+}
+
+export function inferExperienceType(value = '') {
+  const text = String(value).toLowerCase();
+  if (/挑戦|成長|資格|出版|開業|事業|達成|challenge|growth/.test(text)) return '挑戦・成長';
+  if (/一度は|人生で|会いたい|叶えたい夢|bucket/.test(text)) return '人生で一度は';
+  return '趣味・体験';
+}
 
 export const DOMAINS = [
   { id: 'health', label: '健康', icon: 'heart-pulse', color: '#16a085' },
@@ -48,6 +78,7 @@ export function createEmptyState() {
     records: [],
     goals: [],
     habits: [],
+    wishes: [],
     healthItems: [],
     timeline: [],
     comparisons: [],
@@ -60,7 +91,22 @@ export function createEmptyState() {
       theories: Object.fromEntries(THEORY_OPTIONS.map(t => [t.id, true])),
       gasUrl: '', syncToken: '', syncEnabled: false, autoSync: true,
       theme: 'light', fontScale: 1,
-      installPromptDismissed: false
+      installPromptDismissed: false,
+      integrations: {
+        line: {
+          enabled: false, connected: false, provider: 'gemini', saveHistory: true,
+          dailyLimit: 10, ownerOnly: true, scopes: { ...DEFAULT_LINE_SCOPES }
+        },
+        gpt: {
+          enabled: false, connected: false, useActions: false, gptUrl: '',
+          plusMonthlyYen: 3000, scopes: { ...DEFAULT_DATA_SCOPES }
+        },
+        cost: {
+          questionsPerDay: 10, inputTokens: 4000, outputTokens: 600,
+          usdJpy: 150, geminiInputPerMillionUsd: 0.30,
+          geminiOutputPerMillionUsd: 2.50
+        }
+      }
     }
   };
 }
@@ -106,13 +152,72 @@ export function normalizeState(raw = {}) {
       theories: { ...base.settings.theories, ...(raw.settings?.theories || {}) }
     }
   };
+  const incomingIntegrations = raw.settings?.integrations || {};
+  state.settings.integrations = {
+    ...base.settings.integrations,
+    ...incomingIntegrations,
+    line: {
+      ...base.settings.integrations.line,
+      ...(incomingIntegrations.line || {}),
+      scopes: {
+        ...base.settings.integrations.line.scopes,
+        ...(incomingIntegrations.line?.scopes || {})
+      }
+    },
+    gpt: {
+      ...base.settings.integrations.gpt,
+      ...(incomingIntegrations.gpt || {}),
+      scopes: {
+        ...base.settings.integrations.gpt.scopes,
+        ...(incomingIntegrations.gpt?.scopes || {})
+      }
+    },
+    cost: {
+      ...base.settings.integrations.cost,
+      ...(incomingIntegrations.cost || {})
+    }
+  };
   state.profile.fieldUpdatedAt = { ...base.profile.fieldUpdatedAt, ...(raw.profile?.fieldUpdatedAt || {}) };
   if (!Object.prototype.hasOwnProperty.call(raw, 'scoreUpdatedAt') && raw.scores) {
     const legacyScoreTime = raw.meta?.updatedAt || isoNow();
     state.scoreUpdatedAt = Object.fromEntries(Object.keys(raw.scores).map(key => [key, legacyScoreTime]));
   }
-  for (const key of ['records','goals','habits','healthItems','timeline','comparisons','products','reviews','simulations']) {
-    state[key] = Array.isArray(raw[key]) ? raw[key].map(x => normalizeRecord(x, key.replace(/s$/, ''))) : [];
+  for (const key of ['records','goals','habits','wishes','healthItems','timeline','comparisons','products','reviews','simulations']) {
+    const kind = key === 'wishes' ? 'wish' : key.replace(/s$/, '');
+    state[key] = Array.isArray(raw[key]) ? raw[key].map(x => normalizeRecord(x, kind)) : [];
+  }
+  state.wishes = state.wishes.map(row => {
+    const legacyCategory = String(row.legacy?.originalCategory || '');
+    if (!legacyCategory || row.details?.wishType !== '欲しいもの') return row;
+    const inferredType = inferWishType(legacyCategory);
+    if (inferredType !== 'やってみたいこと・挑戦・体験') return row;
+    return normalizeRecord({
+      ...row,
+      details: {
+        ...(row.details || {}), wishType: inferredType,
+        experienceType: row.details?.experienceType || inferExperienceType(`${legacyCategory} ${row.title}`)
+      }
+    }, 'wish');
+  });
+  if (Number(raw.schemaVersion || 0) < 3) {
+    const moved = state.goals.filter(row => row.legacy?.originalSection === 'future');
+    const existingWishIds = new Set(state.wishes.map(row => row.id));
+    for (const row of moved) {
+      if (existingWishIds.has(row.id)) continue;
+      const category = String(row.legacy?.originalCategory || '').toLowerCase();
+      const wishType = inferWishType(category);
+      const experienceType = wishType === 'やってみたいこと・挑戦・体験'
+        ? (row.details?.experienceType || inferExperienceType(category)) : row.details?.experienceType;
+      state.wishes.push(normalizeRecord({
+        ...row, kind:'wish',
+        details:{ ...(row.details || {}), wishType, ...(experienceType ? { experienceType } : {}) }
+      }, 'wish'));
+      existingWishIds.add(row.id);
+    }
+    if (moved.length) {
+      const movedIds = new Set(moved.map(row => row.id));
+      state.goals = state.goals.filter(row => !movedIds.has(row.id));
+    }
   }
   state.aiHistory = Array.isArray(raw.aiHistory) ? raw.aiHistory.slice(-100) : [];
   state.schemaVersion = SCHEMA_VERSION;
