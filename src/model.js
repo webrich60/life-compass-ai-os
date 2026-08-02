@@ -61,6 +61,24 @@ export function uid(prefix = 'rec') {
 
 export function isoNow() { return new Date().toISOString(); }
 
+export function normalizeExternalUrl(value = '') {
+  let text = String(value || '').trim();
+  if (!text) return '';
+  const hasScheme = /^[a-z][a-z\d+.-]*:/i.test(text);
+  if (!hasScheme) {
+    const host = text.split(/[/?#]/, 1)[0];
+    if (!host.includes('.') || /\s/.test(host)) return '';
+    text = `https://${text}`;
+  }
+  try {
+    const parsed = new URL(text);
+    if (!['http:', 'https:'].includes(parsed.protocol) || !parsed.hostname || parsed.username || parsed.password) return '';
+    return parsed.href;
+  } catch (_) {
+    return '';
+  }
+}
+
 export function createEmptyState() {
   const now = isoNow();
   return {
@@ -121,7 +139,10 @@ export function normalizeRecord(input = {}, kind = 'record') {
   const date = /^\d{4}-\d{2}-\d{2}$/.test(requestedDate) ? requestedDate : createdAt.slice(0, 10);
   const tags = Array.isArray(input.tags) ? input.tags.map(String).filter(Boolean)
     : String(input.tags || '').split(/[,、\n]/).map(x => x.trim()).filter(Boolean);
-  const details = input.details && typeof input.details === 'object' ? input.details : {};
+  const details = input.details && typeof input.details === 'object' ? { ...input.details } : {};
+  const referenceUrl = normalizeExternalUrl(details.referenceUrl || input.referenceUrl || input.linkUrl || '');
+  if (referenceUrl) details.referenceUrl = referenceUrl;
+  else delete details.referenceUrl;
   return {
     id: String(input.id || uid(kind)), kind: String(input.kind || kind),
     domain: String(input.domain || input.section || 'happiness'),

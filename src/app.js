@@ -1,6 +1,6 @@
 import {
   DOMAINS, THEORY_OPTIONS, PERSONAS, WISH_TYPES, EXPERIENCE_TYPES, createEmptyState, normalizeRecord,
-  calculateLifeScore, todayTasks, isoNow, localDateKey, activeRows, reviewDue
+  calculateLifeScore, todayTasks, isoNow, localDateKey, activeRows, reviewDue, normalizeExternalUrl
 } from './model.js';
 import {
   loadCache, saveCache, exportBackup, synchronize,
@@ -52,6 +52,7 @@ const DETAIL_FIELDS = {
   simulation:[['condition','変える条件','textarea'],['horizon','期間','select','1か月|3か月|半年|1年'],['assumptions','前提条件','textarea']]
 };
 const DETAIL_LABELS = Object.fromEntries(Object.values(DETAIL_FIELDS).flat().map(([key,label]) => [key,label]));
+DETAIL_LABELS.referenceUrl = '関連URL';
 const PROFILE_FIELDS = [
   ['name','名前','text'],['birthDate','生年月日','date'],['age','年齢','number'],['location','住まい','text'],
   ['family','家族','textarea'],['medicalHistory','既往歴','textarea'],['likes','好きなこと','textarea'],
@@ -362,7 +363,8 @@ function recordCard(row, fallbackKind) {
   const kind = row.kind || fallbackKind;
   const progress = kind === 'goal' && row.details?.progress !== undefined ? Number(row.details.progress) : null;
   const attachments = Array.isArray(row.details?.attachments) ? row.details.attachments : [];
-  return `<article class="record"><span class="record-date">${displayDate(row.date)}</span><div><span class="badge">${esc(domainLabel(row.domain))}</span><h3>${esc(row.title)}</h3><p>${esc(row.body)}</p>${progress!==null?`<div class="progress" title="進捗 ${progress}%"><i style="width:${Math.max(0,Math.min(100,progress))}%"></i></div>`:''}<div class="record-meta">${row.details?.wishType?`<span class="badge blue">${esc(row.details.wishType)}</span>`:''}${row.details?.experienceType?`<span class="badge">${esc(row.details.experienceType)}</span>`:''}${row.details?.wishStatus?`<span class="badge ${row.details.wishStatus==='実現済み'?'done':''}">${esc(row.details.wishStatus)}</span>`:''}${row.details?.priority?`<span class="badge ${row.details.priority==='高'?'warn':''}">優先度 ${esc(row.details.priority)}</span>`:''}${row.details?.frequency?`<span class="badge">${esc(row.details.frequency)}</span>`:''}${row.details?.budget?`<span class="badge">予算 ${esc(row.details.budget)}</span>`:''}</div>${attachments.map(file=>`<a class="attachment-link" href="${esc(file.url)}" target="_blank" rel="noopener">添付：${esc(file.name)}</a>`).join('')}</div><div class="record-actions"><button class="btn small ghost" data-action="view-record" data-kind="${esc(kind)}" data-id="${esc(row.id)}">見る</button><button class="btn small ghost" data-action="edit-record" data-kind="${esc(kind)}" data-id="${esc(row.id)}">編集</button><button class="btn small danger" data-action="delete-record" data-kind="${esc(kind)}" data-id="${esc(row.id)}">削除</button></div></article>`;
+  const referenceUrl = normalizeExternalUrl(row.details?.referenceUrl);
+  return `<article class="record"><span class="record-date">${displayDate(row.date)}</span><div><span class="badge">${esc(domainLabel(row.domain))}</span><h3>${esc(row.title)}</h3><p>${esc(row.body)}</p>${progress!==null?`<div class="progress" title="進捗 ${progress}%"><i style="width:${Math.max(0,Math.min(100,progress))}%"></i></div>`:''}<div class="record-meta">${row.details?.wishType?`<span class="badge blue">${esc(row.details.wishType)}</span>`:''}${row.details?.experienceType?`<span class="badge">${esc(row.details.experienceType)}</span>`:''}${row.details?.wishStatus?`<span class="badge ${row.details.wishStatus==='実現済み'?'done':''}">${esc(row.details.wishStatus)}</span>`:''}${row.details?.priority?`<span class="badge ${row.details.priority==='高'?'warn':''}">優先度 ${esc(row.details.priority)}</span>`:''}${row.details?.frequency?`<span class="badge">${esc(row.details.frequency)}</span>`:''}${row.details?.budget?`<span class="badge">予算 ${esc(row.details.budget)}</span>`:''}</div>${referenceUrl?`<a class="reference-link" href="${esc(referenceUrl)}" target="_blank" rel="noopener noreferrer">↗ 関連リンクを開く</a>`:''}${attachments.map(file=>`<a class="attachment-link" href="${esc(file.url)}" target="_blank" rel="noopener noreferrer">添付：${esc(file.name)}</a>`).join('')}</div><div class="record-actions"><button class="btn small ghost" data-action="view-record" data-kind="${esc(kind)}" data-id="${esc(row.id)}">見る</button><button class="btn small ghost" data-action="edit-record" data-kind="${esc(kind)}" data-id="${esc(row.id)}">編集</button><button class="btn small danger" data-action="delete-record" data-kind="${esc(kind)}" data-id="${esc(row.id)}">削除</button></div></article>`;
 }
 
 function render() {
@@ -410,7 +412,8 @@ function openRecordDialog(kind, id = '') {
   const dialog = $('#recordDialog');
   const titlePlaceholder = kind === 'wish' ? '例：キャンピングカー、北海道旅行、Kindle出版' : '例：朝の血圧、今月の目標、事業アイデア';
   const bodyPlaceholder = kind === 'wish' ? '欲しいもの・場所・挑戦・体験と、叶えたいイメージを自由に書いてください' : '事実や気づきを自由に書いてください';
-  dialog.innerHTML = `<form id="recordForm"><div class="modal-head"><div><span class="badge">${existing?'編集':'新規'}</span><h2>${esc(KIND_LABELS[kind])}</h2></div><button class="icon-btn" type="button" data-close>×</button></div><div class="modal-body form-grid"><input type="hidden" name="kind" value="${kind}"><div class="field"><label>日付</label><input name="date" type="date" value="${esc(existing?.date || localDateKey())}" required></div><div class="field"><label>関連する分野</label><select name="domain">${DOMAINS.map(domain=>`<option value="${domain.id}" ${(existing?.domain || defaultDomain(kind))===domain.id?'selected':''}>${domain.label}</option>`).join('')}</select></div><div class="field full"><label>タイトル</label><input name="title" value="${esc(existing?.title || '')}" required placeholder="${titlePlaceholder}"></div><div class="field full"><label>概要・自由メモ</label><textarea name="body" placeholder="${bodyPlaceholder}">${esc(existing?.body || '')}</textarea></div>${detailFieldHtml(kind,existing?.details)}<div class="field full"><label>タグ</label><input name="tags" value="${esc((existing?.tags||[]).join('、'))}" placeholder="健康、挑戦、家族 など"></div><div class="field full"><label>画像・添付（任意・8MB以下）</label><input name="attachment" type="file"><span class="hint">添付はGoogle Driveへ保存します。同期設定が必要です。</span></div><p class="mobile-sheet-note field full">下へスクロールすると保存ボタンがあります。</p></div><div class="modal-actions"><button class="btn ghost" type="button" data-close>キャンセル</button><button class="btn" type="submit">${existing?'更新する':'保存する'}</button></div></form>`;
+  const urlLabel = kind === 'wish' ? '関連URL（商品・場所・体験のページ）' : '関連URL（参考ページ・地図・予約ページなど）';
+  dialog.innerHTML = `<form id="recordForm"><div class="modal-head"><div><span class="badge">${existing?'編集':'新規'}</span><h2>${esc(KIND_LABELS[kind])}</h2></div><button class="icon-btn" type="button" data-close>×</button></div><div class="modal-body form-grid"><input type="hidden" name="kind" value="${kind}"><div class="field"><label>日付</label><input name="date" type="date" value="${esc(existing?.date || localDateKey())}" required></div><div class="field"><label>関連する分野</label><select name="domain">${DOMAINS.map(domain=>`<option value="${domain.id}" ${(existing?.domain || defaultDomain(kind))===domain.id?'selected':''}>${domain.label}</option>`).join('')}</select></div><div class="field full"><label>タイトル</label><input name="title" value="${esc(existing?.title || '')}" required placeholder="${titlePlaceholder}"></div><div class="field full"><label>概要・自由メモ</label><textarea name="body" placeholder="${bodyPlaceholder}">${esc(existing?.body || '')}</textarea></div>${detailFieldHtml(kind,existing?.details)}<div class="field full"><label>${urlLabel}</label><input name="referenceUrl" type="text" inputmode="url" value="${esc(existing?.details?.referenceUrl || '')}" placeholder="https://example.com または example.com" autocapitalize="off" autocomplete="url" spellcheck="false"><span class="hint">URLはPC・スマホで同期され、一覧から直接開けます。https://は省略できます。</span></div><div class="field full"><label>タグ</label><input name="tags" value="${esc((existing?.tags||[]).join('、'))}" placeholder="健康、挑戦、家族 など"></div><div class="field full"><label>画像・添付（任意・8MB以下）</label><input name="attachment" type="file"><span class="hint">添付はGoogle Driveへ保存します。同期設定が必要です。</span></div><p class="mobile-sheet-note field full">下へスクロールすると保存ボタンがあります。</p></div><div class="modal-actions"><button class="btn ghost" type="button" data-close>キャンセル</button><button class="btn" type="submit">${existing?'更新する':'保存する'}</button></div></form>`;
   dialog.showModal();
   dialog.querySelectorAll('[data-close]').forEach(button => button.onclick=()=>dialog.close());
   if (kind === 'wish') {
@@ -432,6 +435,13 @@ function openRecordDialog(kind, id = '') {
     const raw = Object.fromEntries(new FormData(form));
     const details = {...(existing?.details || {})};
     for (const [name,value] of Object.entries(raw)) if (name.startsWith('detail__')) details[name.slice(8)] = value;
+    const referenceUrl = normalizeExternalUrl(raw.referenceUrl);
+    if (raw.referenceUrl.trim() && !referenceUrl) {
+      if (submit) { submit.disabled=false; submit.textContent=existing?'更新する':'保存する'; }
+      return toast('関連URLを確認してください。http:// または https:// のWebページだけ保存できます。','error');
+    }
+    if (referenceUrl) details.referenceUrl = referenceUrl;
+    else delete details.referenceUrl;
     if (kind === 'wish' && details.wishType !== 'やってみたいこと・挑戦・体験') delete details.experienceType;
     const base = {...(existing || {}),date:raw.date,domain:raw.domain,title:raw.title,body:raw.body,tags:raw.tags,details,updatedAt:isoNow()};
     const record = normalizeRecord(base,kind);
@@ -463,10 +473,11 @@ function defaultDomain(kind) {
 function showRecord(kind,id) {
   const row = state[collectionFor(kind)]?.find(item=>item.id===id);
   if (!row) return;
-  const detailRows = Object.entries(row.details || {}).filter(([key,value]) => value && key !== 'attachments').map(([key,value])=>`<div class="detail-row"><small>${esc(DETAIL_LABELS[key]||key)}</small><p>${esc(value)}</p></div>`).join('');
-  const attachments = (row.details?.attachments || []).map(file=>`<a class="attachment-link" href="${esc(file.url)}" target="_blank" rel="noopener">${esc(file.name)}</a>`).join('');
+  const referenceUrl = normalizeExternalUrl(row.details?.referenceUrl);
+  const detailRows = Object.entries(row.details || {}).filter(([key,value]) => value && !['attachments','referenceUrl'].includes(key)).map(([key,value])=>`<div class="detail-row"><small>${esc(DETAIL_LABELS[key]||key)}</small><p>${esc(value)}</p></div>`).join('');
+  const attachments = (row.details?.attachments || []).map(file=>`<a class="attachment-link" href="${esc(file.url)}" target="_blank" rel="noopener noreferrer">${esc(file.name)}</a>`).join('');
   const dialog = $('#detailDialog');
-  dialog.innerHTML = `<div class="modal-head"><div><span class="badge">${esc(KIND_LABELS[kind]||kind)}</span><h2>${esc(row.title)}</h2></div><button class="icon-btn" data-close>×</button></div><div class="modal-body"><div class="detail-grid"><div class="detail-row"><small>日付・分野</small><p>${displayDate(row.date)} ／ ${esc(domainLabel(row.domain))}</p></div>${row.body?`<div class="detail-row"><small>概要・メモ</small><p>${esc(row.body)}</p></div>`:''}${detailRows}${attachments?`<div class="detail-row"><small>添付</small>${attachments}</div>`:''}</div></div><div class="modal-actions"><button class="btn ghost" data-close>閉じる</button><button class="btn" data-action="edit-from-detail" data-kind="${esc(kind)}" data-id="${esc(id)}">編集する</button></div>`;
+  dialog.innerHTML = `<div class="modal-head"><div><span class="badge">${esc(KIND_LABELS[kind]||kind)}</span><h2>${esc(row.title)}</h2></div><button class="icon-btn" data-close>×</button></div><div class="modal-body"><div class="detail-grid"><div class="detail-row"><small>日付・分野</small><p>${displayDate(row.date)} ／ ${esc(domainLabel(row.domain))}</p></div>${row.body?`<div class="detail-row"><small>概要・メモ</small><p>${esc(row.body)}</p></div>`:''}${referenceUrl?`<div class="detail-row"><small>関連URL</small><a class="reference-link" href="${esc(referenceUrl)}" target="_blank" rel="noopener noreferrer">↗ Webページを開く</a><p class="url-text">${esc(referenceUrl)}</p></div>`:''}${detailRows}${attachments?`<div class="detail-row"><small>添付</small>${attachments}</div>`:''}</div></div><div class="modal-actions"><button class="btn ghost" data-close>閉じる</button><button class="btn" data-action="edit-from-detail" data-kind="${esc(kind)}" data-id="${esc(id)}">編集する</button></div>`;
   dialog.showModal();
   dialog.querySelectorAll('[data-close]').forEach(button=>button.onclick=()=>dialog.close());
   dialog.querySelector('[data-action="edit-from-detail"]').onclick=()=>{dialog.close();openRecordDialog(kind,id)};
@@ -690,11 +701,11 @@ async function registerServiceWorker() {
   if (!('serviceWorker' in navigator)) return;
   const hadController = Boolean(navigator.serviceWorker.controller);
   try {
-    const registration = await navigator.serviceWorker.register('./sw.js?v=2.1.3', { updateViaCache:'none' });
+    const registration = await navigator.serviceWorker.register('./sw.js?v=2.2.0', { updateViaCache:'none' });
     await registration.update();
     if (hadController) {
       navigator.serviceWorker.addEventListener('controllerchange',()=>{
-        const refreshKey='life-compass-sw-refresh-v2.1.3';
+        const refreshKey='life-compass-sw-refresh-v2.2.0';
         if(sessionStorage.getItem(refreshKey))return;
         sessionStorage.setItem(refreshKey,'1');
         location.reload();
