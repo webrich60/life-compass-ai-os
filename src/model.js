@@ -79,6 +79,27 @@ export function normalizeExternalUrl(value = '') {
   }
 }
 
+export const MAX_REFERENCE_LINKS = 4;
+
+export function normalizeReferenceLinks(input = {}, fallbackUrl = '') {
+  const details = input && typeof input === 'object' ? input : {};
+  const source = Array.isArray(details.referenceLinks) ? details.referenceLinks : [];
+  const links = [];
+  for (const item of source) {
+    if (links.length >= MAX_REFERENCE_LINKS) break;
+    const rawUrl = typeof item === 'string' ? item : item?.url;
+    const url = normalizeExternalUrl(rawUrl || '');
+    if (!url || links.some(link => link.url === url)) continue;
+    const rawLabel = typeof item === 'object' ? String(item?.label || '').trim() : '';
+    links.push({ label: rawLabel || `関連リンク${links.length + 1}`, url });
+  }
+  const legacyUrl = normalizeExternalUrl(details.referenceUrl || fallbackUrl || '');
+  if (legacyUrl && !links.some(link => link.url === legacyUrl) && links.length < MAX_REFERENCE_LINKS) {
+    links.unshift({ label: '関連リンク', url: legacyUrl });
+  }
+  return links.slice(0, MAX_REFERENCE_LINKS);
+}
+
 export function createEmptyState() {
   const now = isoNow();
   return {
@@ -140,9 +161,14 @@ export function normalizeRecord(input = {}, kind = 'record') {
   const tags = Array.isArray(input.tags) ? input.tags.map(String).filter(Boolean)
     : String(input.tags || '').split(/[,、\n]/).map(x => x.trim()).filter(Boolean);
   const details = input.details && typeof input.details === 'object' ? { ...input.details } : {};
-  const referenceUrl = normalizeExternalUrl(details.referenceUrl || input.referenceUrl || input.linkUrl || '');
-  if (referenceUrl) details.referenceUrl = referenceUrl;
-  else delete details.referenceUrl;
+  const referenceLinks = normalizeReferenceLinks(details, input.referenceUrl || input.linkUrl || '');
+  if (referenceLinks.length) {
+    details.referenceLinks = referenceLinks;
+    details.referenceUrl = referenceLinks[0].url;
+  } else {
+    delete details.referenceLinks;
+    delete details.referenceUrl;
+  }
   return {
     id: String(input.id || uid(kind)), kind: String(input.kind || kind),
     domain: String(input.domain || input.section || 'happiness'),
