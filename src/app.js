@@ -76,11 +76,21 @@ function navHtml(keys = PAGES.map(item => item[0])) {
     `<button class="nav-link ${page===id?'active':''}" data-page="${id}"><span>${icon}</span><span>${label}</span></button>`).join('');
 }
 
+function setSidebarOpen(open) {
+  const sidebar = $('#sidebar');
+  const menuButton = $('#menuButton');
+  const shouldOpen = Boolean(open) && window.matchMedia('(max-width:980px)').matches;
+  sidebar.classList.toggle('open', shouldOpen);
+  menuButton.setAttribute('aria-expanded', String(shouldOpen));
+  menuButton.setAttribute('aria-label', shouldOpen ? 'メニューを閉じる' : 'メニューを開く');
+  document.body.classList.toggle('menu-open', shouldOpen);
+}
+
 function setPage(next) {
   page = PAGES.some(([id]) => id === next) || EXTRA_PAGES.includes(next) ? next : 'home';
   history.replaceState(null,'',`#${page}`);
   render();
-  $('#sidebar').classList.remove('open');
+  setSidebarOpen(false);
   window.scrollTo({top:0,behavior:'smooth'});
 }
 
@@ -650,7 +660,10 @@ document.addEventListener('click',event=>{
   const pageElement=event.target.closest('[data-page]');if(pageElement)return setPage(pageElement.dataset.page);
   const actionElement=event.target.closest('[data-action]');if(actionElement)handleAction(actionElement.dataset.action,actionElement);
 });
-$('#menuButton').onclick=()=>$('#sidebar').classList.toggle('open');
+$('#menuButton').onclick=()=>setSidebarOpen(!$('#sidebar').classList.contains('open'));
+$('#sidebarBackdrop').onclick=()=>setSidebarOpen(false);
+document.addEventListener('keydown',event=>{if(event.key==='Escape')setSidebarOpen(false)});
+window.addEventListener('resize',()=>{if(!window.matchMedia('(max-width:980px)').matches)setSidebarOpen(false)});
 $('#jsonFile').addEventListener('change',event=>{if(event.target.files.length)inspectFiles(event.target.files);event.target.value=''});
 window.addEventListener('hashchange',()=>{page=location.hash.slice(1)||'home';render()});
 window.addEventListener('online',()=>{updateChrome();scheduleAutoSync()});
