@@ -199,6 +199,19 @@ function taskHtml(row) {
   return `<div class="task ${overdue?'overdue':''}"><button class="task-check" data-action="done" data-kind="${esc(row.kind)}" data-id="${esc(row.id)}" aria-label="完了にする"></button><div class="task-main"><b>${esc(row.title)}</b><small>${overdue?'期限超過：':''}${esc(row.details?.dueDate || row.body || row.date || '')}</small></div><span class="badge">${esc(domainLabel(row.domain))}</span></div>`;
 }
 
+function quickActionsHtml(placement = 'desktop') {
+  return `<section class="quick-entry quick-entry-${placement}" aria-label="すぐに記録">
+    ${sectionHead('すぐに記録','よく使う入力を、ここからすぐに追加できます。')}
+    <div class="quick-actions">
+      <button class="quick quick-record" data-action="new-record" data-kind="record"><b>＋ 日々の記録</b><small>気づき・感情・出来事</small></button>
+      <button class="quick quick-health" data-action="new-record" data-kind="healthItem"><b>＋ 健康</b><small>症状・通院・測定</small></button>
+      <button class="quick quick-goal" data-action="new-record" data-kind="goal"><b>＋ 目標</b><small>理想への次の一歩</small></button>
+      <button class="quick quick-wish" data-action="new-record" data-kind="wish"><b>＋ 夢・楽しみ</b><small>もの・場所・挑戦・体験</small></button>
+      <button class="quick quick-product" data-action="new-record" data-kind="product"><b>＋ 商品・事業</b><small>WEBRICHの種</small></button>
+    </div>
+  </section>`;
+}
+
 function renderHome() {
   const score = calculateLifeScore(state);
   const tasks = todayTasks(state);
@@ -207,6 +220,7 @@ function renderHome() {
   const reviewNeeded = ['weekly','monthly','yearly'].filter(period => reviewDue(state,period)).length;
   const lastAI = [...state.aiHistory].sort((a,b)=>new Date(b.createdAt)-new Date(a.createdAt))[0];
   return `<div class="page-enter">
+    ${quickActionsHtml('mobile')}
     <div class="hero"><div class="hero-grid"><div><span class="badge">TODAY'S COMPASS</span><h2>${esc(state.profile.name || '相棒')}さん、今日を少し前へ。</h2><p>全部を一度に変えなくて大丈夫です。今の人生データから、効果の大きい一歩を選びます。</p><div class="btn-row"><button class="btn" data-page="ai">AIに優先順位を聞く</button><button class="btn secondary" data-action="new-record" data-kind="record">今日を記録</button></div></div><div class="life-score">${score}<small>LIFE SCORE</small></div></div></div>
     ${sectionHead('今日の状態','8つの視点から、今の位置を短時間で確認できます。','<button class="btn ghost" data-page="life">人生レーダーを見る</button>')}
     <div class="grid grid-4">
@@ -218,8 +232,7 @@ function renderHome() {
     ${sectionHead('今日やること','目標・習慣・本日の記録から表示')}
     <div class="grid grid-2"><div class="card">${tasks.length?tasks.map(taskHtml).join(''):`<div class="empty">今日の予定はまだありません<br><button class="btn secondary" data-action="new-record" data-kind="goal">目標を追加</button></div>`}</div>
     <div class="card ai-box"><span class="badge blue">AI COMPASS</span><h2>今日の問い</h2><p>いま一番変えると、人生全体に良い影響が広がるものは何か？</p><button class="btn" data-action="quick-ai">横断分析する</button>${lastAI?`<p class="ai-result">${esc(lastAI.answer).slice(0,340)}${lastAI.answer.length>340?'…':''}</p>`:'<div class="empty">最初の横断分析を行うと、ここに要点が表示されます。</div>'}</div></div>
-    ${sectionHead('すぐに記録')}
-    <div class="quick-actions"><button class="quick" data-action="new-record" data-kind="record"><b>＋ 日々の記録</b><small>気づき・感情・出来事</small></button><button class="quick" data-action="new-record" data-kind="healthItem"><b>＋ 健康</b><small>症状・通院・測定</small></button><button class="quick" data-action="new-record" data-kind="goal"><b>＋ 目標</b><small>理想への次の一歩</small></button><button class="quick" data-action="new-record" data-kind="wish"><b>＋ 夢・楽しみ</b><small>もの・場所・挑戦・体験</small></button><button class="quick" data-action="new-record" data-kind="product"><b>＋ 商品・事業</b><small>WEBRICHの種</small></button></div>
+    ${quickActionsHtml('desktop')}
   </div>`;
 }
 
@@ -233,7 +246,7 @@ function renderLife() {
   ${sectionHead('目標と習慣','期限・進捗・頻度まで管理','<div class="btn-row"><button class="btn secondary" data-action="new-record" data-kind="goal">＋ 目標</button><button class="btn secondary" data-action="new-record" data-kind="habit">＋ 習慣</button></div>')}
   <div class="grid grid-2"><div class="card"><h3>目標</h3>${activeRows(state.goals).map(taskHtml).join('')||'<div class="empty">目標はまだありません</div>'}</div><div class="card"><h3>習慣</h3>${activeRows(state.habits).map(taskHtml).join('')||'<div class="empty">習慣はまだありません</div>'}</div></div>
   ${sectionHead('夢・楽しみ','達成義務ではなく、これから叶えたいことを集める場所です。','<button class="btn secondary" data-action="new-record" data-kind="wish">＋ 夢・楽しみを追加</button>')}
-  <div class="grid grid-3 wish-grid"><section class="wish-group"><h3>欲しいもの</h3><p>手に入れたい物や暮らしの道具</p>${wantedItems.length?`<div class="record-list">${wantedItems.map(row=>recordCard(row,'wish')).join('')}</div>`:'<div class="empty">欲しいものはまだありません</div>'}</section><section class="wish-group"><h3>行きたい場所</h3><p>旅先、店、施設、訪れたい地域</p>${wantedPlaces.length?`<div class="record-list">${wantedPlaces.map(row=>recordCard(row,'wish')).join('')}</div>`:'<div class="empty">行きたい場所はまだありません</div>'}</section><section class="wish-group"><h3>やってみたいこと・挑戦・体験</h3><p>成長のための挑戦から、純粋に楽しむ体験まで</p>${wantedExperiences.length?`<div class="record-list">${wantedExperiences.map(row=>recordCard(row,'wish')).join('')}</div>`:'<div class="empty">やってみたいことはまだありません</div>'}</section></div></div>`;
+  <div class="grid grid-3 wish-grid"><section class="wish-group wish-wanted"><h3>欲しいもの</h3><p>手に入れたい物や暮らしの道具</p>${wantedItems.length?`<div class="record-list">${wantedItems.map(row=>recordCard(row,'wish')).join('')}</div>`:'<div class="empty">欲しいものはまだありません</div>'}</section><section class="wish-group wish-place"><h3>行きたい場所</h3><p>旅先、店、施設、訪れたい地域</p>${wantedPlaces.length?`<div class="record-list">${wantedPlaces.map(row=>recordCard(row,'wish')).join('')}</div>`:'<div class="empty">行きたい場所はまだありません</div>'}</section><section class="wish-group wish-experience"><h3>やってみたいこと・挑戦・体験</h3><p>成長のための挑戦から、純粋に楽しむ体験まで</p>${wantedExperiences.length?`<div class="record-list">${wantedExperiences.map(row=>recordCard(row,'wish')).join('')}</div>`:'<div class="empty">やってみたいことはまだありません</div>'}</section></div></div>`;
 }
 
 function renderHealth() {
@@ -370,14 +383,21 @@ function referenceLinkEditorRow(link = {}) {
   return `<div class="reference-link-row" data-reference-row><input type="text" data-reference-label value="${esc(link.label || '')}" placeholder="名前（例：公式サイト、YouTube）" maxlength="40"><input type="text" inputmode="url" data-reference-url value="${esc(link.url || '')}" placeholder="https://example.com または example.com" autocapitalize="off" autocomplete="off" spellcheck="false"><button class="icon-btn subtle reference-remove" type="button" data-remove-reference aria-label="このリンクを削除">×</button></div>`;
 }
 
+function wishTypeClass(value = '') {
+  if (value === '行きたい場所') return 'wish-place';
+  if (value === 'やってみたいこと・挑戦・体験') return 'wish-experience';
+  return 'wish-wanted';
+}
+
 function recordCard(row, fallbackKind) {
   const kind = row.kind || fallbackKind;
   const progress = kind === 'goal' && row.details?.progress !== undefined ? Number(row.details.progress) : null;
   const completed = (kind === 'wish' && row.details?.wishStatus === '実現済み')
     || (kind === 'goal' && (row.details?.goalStatus === '達成済み' || progress >= 100 || row.status === 'done'));
   const completionLabel = kind === 'wish' ? '実現済み' : '達成済み';
+  const wishClass = kind === 'wish' ? wishTypeClass(row.details?.wishType) : '';
   const attachments = Array.isArray(row.details?.attachments) ? row.details.attachments : [];
-  return `<article class="record ${completed?'completed':''}">${completed?`<span class="completion-ribbon">✓ ${completionLabel}</span>`:''}<span class="record-date">${displayDate(row.date)}</span><div><span class="badge">${esc(domainLabel(row.domain))}</span><h3>${esc(row.title)}</h3><p>${esc(row.body)}</p>${progress!==null?`<div class="progress" title="進捗 ${progress}%"><i style="width:${Math.max(0,Math.min(100,progress))}%"></i></div>`:''}<div class="record-meta">${row.details?.wishType?`<span class="badge blue">${esc(row.details.wishType)}</span>`:''}${row.details?.experienceType?`<span class="badge">${esc(row.details.experienceType)}</span>`:''}${row.details?.wishStatus?`<span class="badge ${row.details.wishStatus==='実現済み'?'completion':''}">${esc(row.details.wishStatus)}</span>`:''}${row.details?.goalStatus?`<span class="badge ${row.details.goalStatus==='達成済み'?'completion':''}">${esc(row.details.goalStatus)}</span>`:''}${row.details?.priority?`<span class="badge ${row.details.priority==='高'?'warn':''}">優先度 ${esc(row.details.priority)}</span>`:''}${row.details?.frequency?`<span class="badge">${esc(row.details.frequency)}</span>`:''}${row.details?.budget?`<span class="badge">予算 ${esc(row.details.budget)}</span>`:''}</div>${referenceLinksHtml(row.details,true)}${attachments.map(file=>`<a class="attachment-link" href="${esc(file.url)}" target="_blank" rel="noopener noreferrer">添付：${esc(file.name)}</a>`).join('')}</div><div class="record-actions"><button class="btn small ghost" data-action="view-record" data-kind="${esc(kind)}" data-id="${esc(row.id)}">見る</button><button class="btn small ghost" data-action="edit-record" data-kind="${esc(kind)}" data-id="${esc(row.id)}">編集</button><button class="btn small danger" data-action="delete-record" data-kind="${esc(kind)}" data-id="${esc(row.id)}">削除</button></div></article>`;
+  return `<article class="record ${wishClass} ${completed?'completed':''}">${completed?`<span class="completion-ribbon">✓ ${completionLabel}</span>`:''}<span class="record-date">${displayDate(row.date)}</span><div><span class="badge">${esc(domainLabel(row.domain))}</span><h3>${esc(row.title)}</h3><p>${esc(row.body)}</p>${progress!==null?`<div class="progress" title="進捗 ${progress}%"><i style="width:${Math.max(0,Math.min(100,progress))}%"></i></div>`:''}<div class="record-meta">${row.details?.wishType?`<span class="badge wish-type-tag ${wishClass}">${esc(row.details.wishType)}</span>`:''}${row.details?.experienceType?`<span class="badge">${esc(row.details.experienceType)}</span>`:''}${row.details?.wishStatus?`<span class="badge ${row.details.wishStatus==='実現済み'?'completion':''}">${esc(row.details.wishStatus)}</span>`:''}${row.details?.goalStatus?`<span class="badge ${row.details.goalStatus==='達成済み'?'completion':''}">${esc(row.details.goalStatus)}</span>`:''}${row.details?.priority?`<span class="badge ${row.details.priority==='高'?'warn':''}">優先度 ${esc(row.details.priority)}</span>`:''}${row.details?.frequency?`<span class="badge">${esc(row.details.frequency)}</span>`:''}${row.details?.budget?`<span class="badge">予算 ${esc(row.details.budget)}</span>`:''}</div>${referenceLinksHtml(row.details,true)}${attachments.map(file=>`<a class="attachment-link" href="${esc(file.url)}" target="_blank" rel="noopener noreferrer">添付：${esc(file.name)}</a>`).join('')}</div><div class="record-actions"><button class="btn small ghost" data-action="view-record" data-kind="${esc(kind)}" data-id="${esc(row.id)}">見る</button><button class="btn small ghost" data-action="edit-record" data-kind="${esc(kind)}" data-id="${esc(row.id)}">編集</button><button class="btn small danger" data-action="delete-record" data-kind="${esc(kind)}" data-id="${esc(row.id)}">削除</button></div></article>`;
 }
 
 function render() {
@@ -758,11 +778,11 @@ async function registerServiceWorker() {
   if (!('serviceWorker' in navigator)) return;
   const hadController = Boolean(navigator.serviceWorker.controller);
   try {
-    const registration = await navigator.serviceWorker.register('./sw.js?v=2.3.0', { updateViaCache:'none' });
+    const registration = await navigator.serviceWorker.register('./sw.js?v=2.4.0', { updateViaCache:'none' });
     await registration.update();
     if (hadController) {
       navigator.serviceWorker.addEventListener('controllerchange',()=>{
-        const refreshKey='life-compass-sw-refresh-v2.3.0';
+        const refreshKey='life-compass-sw-refresh-v2.4.0';
         if(sessionStorage.getItem(refreshKey))return;
         sessionStorage.setItem(refreshKey,'1');
         location.reload();
