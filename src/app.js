@@ -81,6 +81,8 @@ let syncTimer = null;
 let syncInFlight = false;
 let deferredInstallPrompt = null;
 let searchKind = 'all';
+let lifeView = 'cards';
+let wishTab = 'wanted';
 const $ = selector => document.querySelector(selector);
 const esc = value => String(value ?? '').replace(/[&<>'"]/g, char => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[char]));
 
@@ -266,17 +268,69 @@ function renderHome() {
   </div>`;
 }
 
+function scoreGuideHtml() {
+  const levels = [
+    ['0〜20','かなり不満','早めに見直したい状態'],
+    ['21〜40','課題が多い','困りごとが目立つ状態'],
+    ['41〜60','普通・中間','良い点と課題が半々'],
+    ['61〜80','おおむね満足','さらに伸ばしたい状態'],
+    ['81〜100','非常に満足','理想にかなり近い状態']
+  ];
+  return `<details class="score-guide"><summary>点数の基準</summary><div class="score-guide-body"><p><b>この点数は自動診断ではなく、自分自身が感じる現在の満足度を0〜100で付ける自己評価です。</b> 初期値は全項目50点です。ホームの「人生スコア」は8項目の単純平均で、登録件数やAIが勝手に加点・減点する仕組みではありません。</p><div class="score-scale">${levels.map(([range,title,note])=>`<div><strong>${range}</strong><b>${title}</b><small>${note}</small></div>`).join('')}</div><p class="score-guide-note">同じ基準で定期的に付け直すと、「何点か」よりも「前回からどう変わったか」が分かります。</p></div></details>`;
+}
+
+function mindMapLeaf(row, kind) {
+  return `<button class="mindmap-leaf" data-action="view-record" data-kind="${esc(kind)}" data-id="${esc(row.id)}" title="${esc(row.title)}を開く"><span>${esc(row.title)}</span>${kind==='goal' && row.details?.progress!==undefined?`<small>${Number(row.details.progress||0)}%</small>`:''}</button>`;
+}
+
+function mindMapBranch({label, icon, rows, kind, theme}) {
+  const items = rows.slice(0, 6);
+  return `<section class="mindmap-branch mindmap-${esc(theme)}"><h3><span>${icon}</span>${esc(label)}<b>${rows.length}</b></h3><div class="mindmap-leaves">${items.length?items.map(row=>mindMapLeaf(row,kind)).join(''):'<span class="mindmap-empty">まだ登録がありません</span>'}${rows.length>items.length?`<span class="mindmap-more">ほか ${rows.length-items.length}件</span>`:''}</div></section>`;
+}
+
+function renderLifeMindMap({wantedItems,wantedPlaces,wantedExperiences}) {
+  const goals = activeRows(state.goals);
+  const habits = activeRows(state.habits);
+  const comparisons = activeRows(state.comparisons);
+  const left = [
+    {label:'目標',icon:'⚑',rows:goals,kind:'goal',theme:'goals'},
+    {label:'習慣',icon:'↻',rows:habits,kind:'habit',theme:'habits'},
+    {label:'理想との比較',icon:'◇',rows:comparisons,kind:'comparison',theme:'comparison'}
+  ];
+  const right = [
+    {label:'欲しいもの',icon:'◈',rows:wantedItems,kind:'wish',theme:'wanted'},
+    {label:'行きたい場所',icon:'⌖',rows:wantedPlaces,kind:'wish',theme:'places'},
+    {label:'やりたいこと',icon:'✦',rows:wantedExperiences,kind:'wish',theme:'experiences'}
+  ];
+  const total = [...left,...right].reduce((sum,item)=>sum+item.rows.length,0);
+  return `<section class="mindmap-panel" aria-label="人生設計マインドマップ"><div class="mindmap-caption"><div><h2>人生マインドマップ</h2><p>中心から目標・習慣・夢へつながる全体像です。項目を押すと詳細を確認できます。</p></div><span>${total}件</span></div><div class="mindmap-canvas"><div class="mindmap-side mindmap-left">${left.map(mindMapBranch).join('')}</div><div class="mindmap-center-wrap"><div class="mindmap-center-node"><span>LC</span><b>Life Compass</b><small>人生設計</small></div></div><div class="mindmap-side mindmap-right">${right.map(mindMapBranch).join('')}</div></div></section>`;
+}
+
+function wishTabsHtml(counts) {
+  const tabs = [
+    ['wanted','欲しいもの','◈',counts.wanted],
+    ['place','行きたい場所','⌖',counts.place],
+    ['experience','やりたいこと','✦',counts.experience]
+  ];
+  return `<div class="wish-mobile-tabs" role="tablist" aria-label="夢・楽しみの種類">${tabs.map(([id,label,icon,count])=>`<button class="${wishTab===id?'active':''}" data-wish-tab="${id}" role="tab" aria-selected="${wishTab===id}"><span>${icon}</span><b>${label}</b><small>${count}件</small></button>`).join('')}</div>`;
+}
+
 function renderLife() {
   const wantedItems = activeRows(state.wishes).filter(row => (row.details?.wishType || '欲しいもの') === '欲しいもの');
   const wantedPlaces = activeRows(state.wishes).filter(row => row.details?.wishType === '行きたい場所');
   const wantedExperiences = activeRows(state.wishes).filter(row => row.details?.wishType === 'やってみたいこと・挑戦・体験');
-  return `<div class="page-enter">${sectionHead('人生レーダー','点数は評価ではなく、今の位置と変化を見つける目印です。','<button class="btn" data-action="save-scores">点数を保存</button>')}
-  <div class="card radar-wrap">${radarSvg()}<div class="score-editor">${DOMAINS.map(domain=>`<div class="score-row"><label>${domain.label}</label><input type="range" min="0" max="100" value="${state.scores[domain.id]}" data-score="${domain.id}"><output>${state.scores[domain.id]}</output></div>`).join('')}</div></div>
-  ${sectionHead('理想との比較','過去の理想 → 現在 → 新しい理想を専用項目で整理','<button class="btn secondary" data-action="new-record" data-kind="comparison">＋ 比較を追加</button>')}${recordList(state.comparisons,'comparison')}
+  const lifeData = {wantedItems,wantedPlaces,wantedExperiences};
+  const cards = `${sectionHead('理想との比較','過去の理想 → 現在 → 新しい理想を専用項目で整理','<button class="btn secondary" data-action="new-record" data-kind="comparison">＋ 比較を追加</button>')}${recordList(state.comparisons,'comparison')}
   ${sectionHead('目標と習慣','期限・進捗・頻度まで管理','<div class="btn-row"><button class="btn secondary" data-action="new-record" data-kind="goal">＋ 目標</button><button class="btn secondary" data-action="new-record" data-kind="habit">＋ 習慣</button></div>')}
   <div class="grid grid-2"><div class="card"><h3>目標</h3>${activeRows(state.goals).map(taskHtml).join('')||'<div class="empty">目標はまだありません</div>'}</div><div class="card"><h3>習慣</h3>${activeRows(state.habits).map(taskHtml).join('')||'<div class="empty">習慣はまだありません</div>'}</div></div>
   ${sectionHead('夢・楽しみ','達成義務ではなく、これから叶えたいことを集める場所です。','<button class="btn secondary" data-action="new-record" data-kind="wish">＋ 夢・楽しみを追加</button>')}
-  <div class="grid grid-3 wish-grid"><section class="wish-group wish-wanted"><h3>欲しいもの</h3><p>手に入れたい物や暮らしの道具</p>${wantedItems.length?`<div class="record-list">${wantedItems.map(row=>recordCard(row,'wish')).join('')}</div>`:'<div class="empty">欲しいものはまだありません</div>'}</section><section class="wish-group wish-place"><h3>行きたい場所</h3><p>旅先、店、施設、訪れたい地域</p>${wantedPlaces.length?`<div class="record-list">${wantedPlaces.map(row=>recordCard(row,'wish')).join('')}</div>`:'<div class="empty">行きたい場所はまだありません</div>'}</section><section class="wish-group wish-experience"><h3>やってみたいこと・挑戦・体験</h3><p>成長のための挑戦から、純粋に楽しむ体験まで</p>${wantedExperiences.length?`<div class="record-list">${wantedExperiences.map(row=>recordCard(row,'wish')).join('')}</div>`:'<div class="empty">やってみたいことはまだありません</div>'}</section></div></div>`;
+  ${wishTabsHtml({wanted:wantedItems.length,place:wantedPlaces.length,experience:wantedExperiences.length})}
+  <div class="grid grid-3 wish-grid"><section class="wish-group wish-wanted ${wishTab==='wanted'?'mobile-active':''}" data-wish-panel="wanted"><h3>欲しいもの</h3><p>手に入れたい物や暮らしの道具</p>${wantedItems.length?`<div class="record-list">${wantedItems.map(row=>recordCard(row,'wish')).join('')}</div>`:'<div class="empty">欲しいものはまだありません</div>'}</section><section class="wish-group wish-place ${wishTab==='place'?'mobile-active':''}" data-wish-panel="place"><h3>行きたい場所</h3><p>旅先、店、施設、訪れたい地域</p>${wantedPlaces.length?`<div class="record-list">${wantedPlaces.map(row=>recordCard(row,'wish')).join('')}</div>`:'<div class="empty">行きたい場所はまだありません</div>'}</section><section class="wish-group wish-experience ${wishTab==='experience'?'mobile-active':''}" data-wish-panel="experience"><h3>やってみたいこと・挑戦・体験</h3><p>成長のための挑戦から、純粋に楽しむ体験まで</p>${wantedExperiences.length?`<div class="record-list">${wantedExperiences.map(row=>recordCard(row,'wish')).join('')}</div>`:'<div class="empty">やってみたいことはまだありません</div>'}</section></div>`;
+  return `<div class="page-enter">${sectionHead('人生レーダー','自分で付ける現在の満足度です。初期値は50点、人生スコアは8項目の平均です。','<button class="btn" data-action="save-scores">点数を保存</button>')}
+  <div class="card radar-wrap">${radarSvg()}<div class="score-editor">${DOMAINS.map(domain=>`<div class="score-row"><label>${domain.label}</label><input type="range" min="0" max="100" value="${state.scores[domain.id]}" data-score="${domain.id}" aria-label="${domain.label}の自己評価"><output>${state.scores[domain.id]}</output></div>`).join('')}</div></div>
+  ${scoreGuideHtml()}
+  <div class="life-view-switch" role="tablist" aria-label="人生設計の表示方法"><button class="${lifeView==='cards'?'active':''}" data-life-view="cards" role="tab" aria-selected="${lifeView==='cards'}">▦ カード表示</button><button class="${lifeView==='mindmap'?'active':''}" data-life-view="mindmap" role="tab" aria-selected="${lifeView==='mindmap'}">⌘ マインドマップ</button></div>
+  ${lifeView==='mindmap'?renderLifeMindMap(lifeData):cards}</div>`;
 }
 
 function renderHealth() {
@@ -455,6 +509,19 @@ function bindPage() {
     searchKind=button.dataset.searchKind;
     document.querySelectorAll('[data-search-kind]').forEach(item=>item.classList.toggle('active',item===button));
     updateSearchResults();
+  }));
+  document.querySelectorAll('[data-life-view]').forEach(button => button.addEventListener('click',()=>{
+    lifeView=button.dataset.lifeView;
+    render();
+  }));
+  document.querySelectorAll('[data-wish-tab]').forEach(button => button.addEventListener('click',()=>{
+    wishTab=button.dataset.wishTab;
+    document.querySelectorAll('[data-wish-tab]').forEach(item=>{
+      const active=item===button;
+      item.classList.toggle('active',active);
+      item.setAttribute('aria-selected',String(active));
+    });
+    document.querySelectorAll('[data-wish-panel]').forEach(panel=>panel.classList.toggle('mobile-active',panel.dataset.wishPanel===wishTab));
   }));
   document.querySelectorAll('#costQuestions,#costInputTokens,#costOutputTokens,#costUsdJpy').forEach(input => input.addEventListener('input', updateCostPreview));
 }
@@ -808,11 +875,11 @@ async function registerServiceWorker() {
   if (!('serviceWorker' in navigator)) return;
   const hadController = Boolean(navigator.serviceWorker.controller);
   try {
-    const registration = await navigator.serviceWorker.register('./sw.js?v=2.5.0', { updateViaCache:'none' });
+    const registration = await navigator.serviceWorker.register('./sw.js?v=2.6.0', { updateViaCache:'none' });
     await registration.update();
     if (hadController) {
       navigator.serviceWorker.addEventListener('controllerchange',()=>{
-        const refreshKey='life-compass-sw-refresh-v2.5.0';
+        const refreshKey='life-compass-sw-refresh-v2.6.0';
         if(sessionStorage.getItem(refreshKey))return;
         sessionStorage.setItem(refreshKey,'1');
         location.reload();
