@@ -212,6 +212,14 @@ function quickActionsHtml(placement = 'desktop') {
   </section>`;
 }
 
+function dashboardCardHtml({page:target, icon, label, count, theme}) {
+  return `<button class="dashboard-card dashboard-${esc(theme)}" data-page="${esc(target)}" aria-label="${esc(label)} ${count}件">
+    <span class="dashboard-icon" aria-hidden="true">${icon}</span>
+    <span class="dashboard-count">${count}</span>
+    <b>${esc(label)}</b>
+  </button>`;
+}
+
 function renderHome() {
   const score = calculateLifeScore(state);
   const tasks = todayTasks(state);
@@ -219,19 +227,41 @@ function renderHome() {
   const overdue = [...state.goals,...state.habits].filter(row => !row.deletedAt && isOverdue(row));
   const reviewNeeded = ['weekly','monthly','yearly'].filter(period => reviewDue(state,period)).length;
   const lastAI = [...state.aiHistory].sort((a,b)=>new Date(b.createdAt)-new Date(a.createdAt))[0];
+  const recentRecords = [...activeRows(state.records)].sort((a,b)=>new Date(b.updatedAt||b.createdAt||0)-new Date(a.updatedAt||a.createdAt||0)).slice(0,3);
+  const topGoals = activeRows(state.goals).filter(row=>row.details?.goalStatus!=='達成済み' && Number(row.details?.progress||0)<100).slice(0,3);
+  const profileCount = PROFILE_FIELDS.filter(([key])=>String(state.profile[key]||'').trim()).length;
+  const lifeCount = activeRows(state.goals).length + activeRows(state.habits).length + activeRows(state.wishes).length + activeRows(state.comparisons).length;
+  const dashboardCards = [
+    {page:'profile',icon:'♙',label:'プロフィール',count:profileCount,theme:'profile'},
+    {page:'life',icon:'◎',label:'人生設計',count:lifeCount,theme:'life'},
+    {page:'health',icon:'♡',label:'健康',count:activeRows(state.healthItems).length,theme:'health'},
+    {page:'work',icon:'▣',label:'仕事・収入',count:activeRows(state.products).length,theme:'work'},
+    {page:'timeline',icon:'⌁',label:'タイムライン',count:activeRows(state.timeline).length,theme:'timeline'},
+    {page:'reviews',icon:'◷',label:'レビュー',count:activeRows(state.reviews).length,theme:'reviews'},
+    {page:'ai',icon:'✦',label:'AI伴走',count:state.aiHistory.length,theme:'ai'},
+    {page:'integrations',icon:'⌬',label:'AI連携',count:Number(Boolean(state.settings?.lineEnabled))+Number(Boolean(state.settings?.privateGptEnabled)),theme:'integrations'},
+    {page:'data',icon:'⇄',label:'連携・移行',count:allRows().length,theme:'data'},
+    {page:'search',icon:'⌕',label:'全体検索',count:allRows().length,theme:'search'}
+  ];
   return `<div class="page-enter">
     ${quickActionsHtml('mobile')}
-    <div class="hero"><div class="hero-grid"><div><span class="badge">TODAY'S COMPASS</span><h2>${esc(state.profile.name || '相棒')}さん、今日を少し前へ。</h2><p>全部を一度に変えなくて大丈夫です。今の人生データから、効果の大きい一歩を選びます。</p><div class="btn-row"><button class="btn" data-page="ai">AIに優先順位を聞く</button><button class="btn secondary" data-action="new-record" data-kind="record">今日を記録</button></div></div><div class="life-score">${score}<small>LIFE SCORE</small></div></div></div>
-    ${sectionHead('今日の状態','8つの視点から、今の位置を短時間で確認できます。','<button class="btn ghost" data-page="life">人生レーダーを見る</button>')}
-    <div class="grid grid-4">
-      <div class="card metric-card"><span class="metric-icon">◎</span><div><small>いまの重点</small><b>${weakest.label}</b></div></div>
-      <div class="card metric-card"><span class="metric-icon">✓</span><div><small>今日やること</small><b>${tasks.length}件</b></div></div>
-      <div class="card metric-card"><span class="metric-icon">!</span><div><small>期限超過</small><b>${overdue.length}件</b></div></div>
-      <div class="card metric-card"><span class="metric-icon">◷</span><div><small>レビュー時期</small><b>${reviewNeeded}件</b></div></div>
+    <div class="home-dashboard">
+      <section class="home-primary">
+        <div class="home-hero">
+          <div><span class="home-date">${new Intl.DateTimeFormat('ja-JP',{year:'numeric',month:'long',day:'numeric',weekday:'short',timeZone:'Asia/Tokyo'}).format(new Date())}</span><h2>人生の現在地を、今日の一歩に変える</h2><p>${esc(state.profile.name || '相棒')}さんの記録・目標・健康・仕事を一つにつなぎ、今やることを見つけます。</p><div class="btn-row"><button class="btn" data-page="ai">AIに優先順位を聞く</button><button class="btn secondary" data-action="new-record" data-kind="record">今日を記録</button></div></div>
+          <div class="home-score"><b>${score}</b><span>人生スコア</span></div>
+        </div>
+        <div class="dashboard-grid">${dashboardCards.map(dashboardCardHtml).join('')}</div>
+      </section>
+      <aside class="home-rail">
+        <section class="home-panel home-panel-goals"><h2>⚑ 目標の上位</h2>${topGoals.length?topGoals.map(row=>`<button class="rail-item" data-page="life"><b>${esc(row.title)}</b><span>${Number(row.details?.progress||0)}%${row.details?.dueDate?` ・ ${displayDate(row.details.dueDate)}`:''}</span></button>`).join(''):'<div class="empty">目標はまだありません。<br><button class="btn secondary small" data-action="new-record" data-kind="goal">目標を追加</button></div>'}</section>
+        <section class="home-panel home-panel-focus"><h2>◎ 今日の確認</h2><div class="focus-row"><span>いまの重点</span><b>${weakest.label}</b></div><div class="focus-row"><span>今日やること</span><b>${tasks.length}件</b></div><div class="focus-row ${overdue.length?'is-alert':''}"><span>期限超過</span><b>${overdue.length}件</b></div><div class="focus-row"><span>レビュー時期</span><b>${reviewNeeded}件</b></div></section>
+      </aside>
     </div>
-    ${sectionHead('今日やること','目標・習慣・本日の記録から表示')}
-    <div class="grid grid-2"><div class="card">${tasks.length?tasks.map(taskHtml).join(''):`<div class="empty">今日の予定はまだありません<br><button class="btn secondary" data-action="new-record" data-kind="goal">目標を追加</button></div>`}</div>
-    <div class="card ai-box"><span class="badge blue">AI COMPASS</span><h2>今日の問い</h2><p>いま一番変えると、人生全体に良い影響が広がるものは何か？</p><button class="btn" data-action="quick-ai">横断分析する</button>${lastAI?`<p class="ai-result">${esc(lastAI.answer).slice(0,340)}${lastAI.answer.length>340?'…':''}</p>`:'<div class="empty">最初の横断分析を行うと、ここに要点が表示されます。</div>'}</div></div>
+    <div class="home-lower-grid">
+      <section><div class="section-head compact"><div><h2>◷ 最近の記録</h2><p>直近の記録をすぐ確認できます。</p></div><button class="btn ghost small" data-page="search">すべて探す</button></div><div class="card">${recentRecords.length?recentRecords.map(row=>recordCard(row,'record')).join(''):'<div class="empty">まだ記録がありません。まずは今日の出来事から書いてみましょう。</div>'}</div></section>
+      <section><div class="section-head compact"><div><h2>✦ AIからの問い</h2><p>登録データを横断して整理します。</p></div></div><div class="card ai-box"><p>いま一番変えると、人生全体に良い影響が広がるものは何か？</p><button class="btn" data-action="quick-ai">横断分析する</button>${lastAI?`<p class="ai-result">${esc(lastAI.answer).slice(0,340)}${lastAI.answer.length>340?'…':''}</p>`:'<div class="empty">最初の横断分析を行うと、ここに要点が表示されます。</div>'}</div></section>
+    </div>
     ${quickActionsHtml('desktop')}
   </div>`;
 }
@@ -778,11 +808,11 @@ async function registerServiceWorker() {
   if (!('serviceWorker' in navigator)) return;
   const hadController = Boolean(navigator.serviceWorker.controller);
   try {
-    const registration = await navigator.serviceWorker.register('./sw.js?v=2.4.0', { updateViaCache:'none' });
+    const registration = await navigator.serviceWorker.register('./sw.js?v=2.5.0', { updateViaCache:'none' });
     await registration.update();
     if (hadController) {
       navigator.serviceWorker.addEventListener('controllerchange',()=>{
-        const refreshKey='life-compass-sw-refresh-v2.4.0';
+        const refreshKey='life-compass-sw-refresh-v2.5.0';
         if(sessionStorage.getItem(refreshKey))return;
         sessionStorage.setItem(refreshKey,'1');
         location.reload();
