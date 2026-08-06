@@ -175,3 +175,27 @@ button:disabled{cursor:wait;opacity:.58}
   .wish-mobile-tabs{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:7px;margin:0 0 12px;padding:6px;border:1px solid #b9c9dc;border-radius:16px;background:#eaf0f7;position:sticky;top:76px;z-index:8}.wish-mobile-tabs button{min-width:0;min-height:70px;padding:7px 4px;border:0;border-radius:11px;background:transparent;color:#344b66;display:grid;justify-items:center;align-content:center;gap:1px}.wish-mobile-tabs button span{font-size:18px}.wish-mobile-tabs button b{max-width:100%;font-size:12px;line-height:1.25;white-space:normal}.wish-mobile-tabs button small{font-size:10px;font-weight:800}.wish-mobile-tabs button.active{background:#fff;color:#0d5ebd;box-shadow:0 5px 12px rgba(30,78,140,.13)}
   .wish-grid>[data-wish-panel]{display:none}.wish-grid>[data-wish-panel].mobile-active{display:block}.wish-grid{display:block}.wish-group>p{min-height:0}
 }
+
+/* v2.6.1: 相棒専用GPTの状態と使い方を明確化 */
+.ai-usage-summary{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;padding:14px;border:1px solid #c9d9ee;border-radius:17px;background:#f5f9ff}
+.ai-usage-summary>div{display:grid;gap:4px;padding:13px 15px;border-radius:14px;background:#fff;border:1px solid var(--line)}
+.ai-usage-summary small{font-size:12px;font-weight:800;color:var(--muted)}
+.ai-usage-summary b{font-size:17px;color:var(--ink)}
+.ai-usage-summary span{font-size:12px;font-weight:650;color:var(--muted)}
+.ai-usage-summary>div.active{border-color:#8eb9ee;background:#eef6ff}
+.ai-usage-summary>div.inactive{border-color:#d4dbe5;background:#f7f8fa}
+.integration-explainer{padding:15px 17px;border-radius:15px;background:#eaf4ff;border:1px solid #b9d5f5}
+.integration-explainer b{display:block;color:#103e75;font-size:14px}
+.integration-explainer p{margin:5px 0 0;color:#294b72!important;font-size:13px!important}
+.gpt-steps{padding:16px 18px;border-radius:16px;background:#fbfcfe;border:1px solid var(--line)}
+.gpt-steps h4{margin:0 0 8px}
+.gpt-steps ol{margin:0;padding-left:1.45em;display:grid;gap:7px;color:var(--ink-2);font-size:13px;line-height:1.65}
+.action-warning{padding:10px 13px;border-radius:12px;background:#fff8e8;color:#754c08!important;border:1px solid #efdcae}
+
+@media(max-width:720px){
+  .ai-usage-summary{grid-template-columns:1fr;padding:11px}
+  .ai-usage-summary b{font-size:16px}
+  .integration-explainer b{font-size:15px}
+  .integration-explainer p,.gpt-steps ol{font-size:14px!important}
+  .gpt-steps{padding:15px}
+}

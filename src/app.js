@@ -241,7 +241,7 @@ function renderHome() {
     {page:'timeline',icon:'⌁',label:'タイムライン',count:activeRows(state.timeline).length,theme:'timeline'},
     {page:'reviews',icon:'◷',label:'レビュー',count:activeRows(state.reviews).length,theme:'reviews'},
     {page:'ai',icon:'✦',label:'AI伴走',count:state.aiHistory.length,theme:'ai'},
-    {page:'integrations',icon:'⌬',label:'AI連携',count:Number(Boolean(state.settings?.lineEnabled))+Number(Boolean(state.settings?.privateGptEnabled)),theme:'integrations'},
+    {page:'integrations',icon:'⌬',label:'AI連携',count:Number(Boolean(state.settings?.integrations?.line?.enabled))+Number(Boolean(state.settings?.integrations?.gpt?.enabled)),theme:'integrations'},
     {page:'data',icon:'⇄',label:'連携・移行',count:allRows().length,theme:'data'},
     {page:'search',icon:'⌕',label:'全体検索',count:allRows().length,theme:'search'}
   ];
@@ -398,11 +398,25 @@ function scopeGrid(channel) {
 
 function yen(value) { return `約${Math.round(Number(value || 0)).toLocaleString('ja-JP')}円`; }
 
+function isCustomGptUrl(value = '') {
+  try {
+    const url = new URL(String(value).trim());
+    const allowedHost = ['chatgpt.com','www.chatgpt.com','chat.openai.com'].includes(url.hostname.toLowerCase());
+    return allowedHost && /^\/g\/[^/]+/i.test(url.pathname);
+  } catch (_) { return false; }
+}
+
+function aiProviderLabel(value = state.settings.provider) {
+  return value === 'openai' ? 'ChatGPT GPT-5.4 mini' : 'Gemini 2.5 Flash';
+}
+
 function renderIntegrations() {
   const integrations = state.settings.integrations;
   const line = integrations.line;
   const gpt = integrations.gpt;
   const cost = estimateGeminiCost(integrations.cost);
+  const currentAiLabel = aiProviderLabel();
+  const gptUrlReady = isCustomGptUrl(gpt.gptUrl);
   return `<div class="page-enter integrations-page">
     <div class="hero integration-hero"><div class="hero-grid"><div><span class="badge">AI CONNECTION CENTER</span><h2>普段はGemini、深い相談は相棒専用GPTへ。</h2><p>Life Compassを記憶の正本として残し、LINEとChatGPT Plusには許可した情報だけを渡します。未接続の間は既存機能へ影響しません。</p></div><div class="life-score">⌬<small>CONNECT</small></div></div></div>
 
@@ -415,20 +429,27 @@ function renderIntegrations() {
 
     ${sectionHead('公式LINE連携','今は土台だけ保存できます。実際の接続時にLINEトークンと安全な受信サーバーを設定します。')}
     <section class="card integration-card">
-      <div class="integration-title"><div><span class="status-dot ${line.connected?'ok':'warn'}"></span><div><h3>相棒専用LINE伴走ボット</h3><p>${line.connected?'接続済み':'未接続・Life Compass単体で通常利用できます'}</p></div></div><label class="switch"><input id="lineEnabled" type="checkbox" ${line.enabled?'checked':''}><span></span><b>${line.enabled?'準備ON':'準備OFF'}</b></label></div>
+      <div class="integration-title"><div><span class="status-dot ${line.connected?'ok':'warn'}"></span><div><h3>相棒専用LINE伴走ボット</h3><p>${line.connected?'接続済み':'未接続・Life Compass単体で通常利用できます'}</p></div></div><label class="switch" data-integration-switch="line"><input id="lineEnabled" type="checkbox" ${line.enabled?'checked':''} aria-label="LINE連携準備を切り替える"><span></span><b data-switch-text>${line.enabled?'準備ON':'準備OFF'}</b></label></div>
       <div class="form-grid compact-grid"><div class="field"><label>通常回答AI</label><select id="lineProvider"><option value="gemini" selected>Gemini 2.5 Flash</option></select></div><div class="field"><label>1日あたりの上限</label><input id="lineDailyLimit" type="number" min="1" max="100" value="${Number(line.dailyLimit||10)}"></div></div>
       <div class="toggle-row"><label class="toggle-card"><input id="lineSaveHistory" type="checkbox" ${line.saveHistory?'checked':''}> LINE会話をLife Compassへ保存</label><label class="toggle-card"><input id="lineOwnerOnly" type="checkbox" ${line.ownerOnly?'checked':''}> 相棒のLINEユーザーIDだけ許可</label></div>
       <h4>LINEへ渡してよいデータ</h4>${scopeGrid('line')}
     </section>
 
-    ${sectionHead('相棒専用GPT','知識ファイルと指示文を作成し、将来はGPT Actionsで最新データを取得')}
+    ${sectionHead('相棒専用GPT','知識ファイルと指示文を使って、自分専用のGPTを作成します')}
     <section class="card integration-card">
-      <div class="integration-title"><div><span class="status-dot ${gpt.connected?'ok':'warn'}"></span><div><h3>ChatGPT Plus｜非公開GPT</h3><p>${gpt.connected?'登録済み':'未登録・まず知識パッケージを書き出せます'}</p></div></div><label class="switch"><input id="gptEnabled" type="checkbox" ${gpt.enabled?'checked':''}><span></span><b>${gpt.enabled?'利用ON':'利用OFF'}</b></label></div>
-      <div class="form-grid compact-grid"><div class="field full"><label>作成した相棒専用GPTのURL（後から入力）</label><input id="gptUrl" type="url" value="${esc(gpt.gptUrl||'')}" placeholder="https://chatgpt.com/g/..."></div></div>
-      <label class="toggle-card"><input id="gptUseActions" type="checkbox" ${gpt.useActions?'checked':''}> GPT ActionsでLife Compassの最新データを参照する（接続設定後）</label>
+      <div class="ai-usage-summary" aria-label="現在のAI利用状況">
+        <div><small>Life Compass内のAI伴走</small><b>${esc(currentAiLabel)}</b><span>AI伴走画面の「AIモデル」で変更</span></div>
+        <div class="${gpt.enabled?'active':'inactive'}"><small>相棒専用GPT</small><b>${gpt.enabled?'利用ON':'利用OFF'}</b><span>${gptUrlReady?'専用リンク登録済み':'専用リンク未登録'}</span></div>
+      </div>
+      <div class="integration-title"><div><span class="status-dot ${gptUrlReady?'ok':'warn'}"></span><div><h3>ChatGPT Plus｜非公開GPT</h3><p>${gptUrlReady?'相棒専用GPTのリンクを登録済み':'まだ作成していません。まず知識ファイルと指示文を書き出します'}</p></div></div><label class="switch" data-integration-switch="gpt"><input id="gptEnabled" type="checkbox" ${gpt.enabled?'checked':''} aria-label="相棒専用GPTの利用を切り替える"><span></span><b data-switch-text>${gpt.enabled?'利用ON':'利用OFF'}</b></label></div>
+      <div class="integration-explainer"><b>このスイッチは、Life Compass内で使うAIモデルの選択ではありません。</b><p>ONにすると「相棒専用GPTを使う設定」が有効になります。Life Compass内のAI伴走でGeminiとChatGPTを切り替える場合は、AI伴走画面の「AIモデル」を使います。</p></div>
+      <div class="form-grid compact-grid"><div class="field full"><label>相棒専用GPTのリンク（GPT作成後に貼り付け）</label><input id="gptUrl" type="url" value="${esc(gpt.gptUrl||'')}" placeholder="https://chatgpt.com/g/..."><span class="hint">通常の会話共有URLではありません。chatgpt.com/g/ で始まる「GPT本体のリンク」を入力します。</span></div></div>
+      <div class="gpt-steps"><h4>URLの作り方・使い方</h4><ol><li>下の「① 知識ファイル」と「② GPT指示文」を書き出す</li><li>ChatGPTのGPT作成画面で、知識ファイルを追加し、指示文を貼り付ける</li><li>公開範囲を「自分のみ」にして保存し、GPTのリンクをコピーする</li><li>そのリンクを上の欄に貼り付けて「AI連携設定を保存」を押す</li><li>「相棒専用GPTを開く」から、Life Compassの内容を踏まえた深い相談をする</li></ol></div>
+      <label class="toggle-card"><input id="gptUseActions" type="checkbox" ${gpt.useActions?'checked':''}> GPT Actions接続を将来使うための準備設定</label>
+      <p class="fine-print action-warning">このチェックだけでは最新データ連携は始まりません。安全なAPI中継先とActions設定を別途完成させた後に有効になります。</p>
       <div class="privacy-notice"><b>非公開が前提です</b><p>振り返り・健康・家族・住所・金銭・AI履歴は初期状態でOFFです。必要な項目だけ自分で許可してください。</p></div>
       <h4>非公開GPTへ渡してよいデータ</h4>${scopeGrid('gpt')}
-      <div class="btn-row integration-actions"><button class="btn" data-action="export-gpt-knowledge">① 知識ファイル</button><button class="btn secondary" data-action="export-gpt-instructions">② GPT指示文</button><button class="btn ghost" data-action="export-gpt-actions">③ Actionsひな形</button><button class="btn ghost" data-action="open-private-gpt">ChatGPTで深く相談</button></div>
+      <div class="btn-row integration-actions"><button class="btn" data-action="export-gpt-knowledge">① 知識ファイル</button><button class="btn secondary" data-action="export-gpt-instructions">② GPT指示文</button><button class="btn ghost" data-action="export-gpt-actions">③ Actionsひな形</button><button class="btn ghost" data-action="open-private-gpt">${gptUrlReady?'相棒専用GPTを開く':'ChatGPTのGPT一覧を開く'}</button></div>
       <p class="fine-print">Actionsひな形には同期トークンやAPIキーを含めません。実接続時はFirebase Functions等の安全な中継先を設定します。</p>
     </section>
 
@@ -495,6 +516,18 @@ function bindPage() {
   document.querySelectorAll('[data-score]').forEach(element => element.addEventListener('input',()=>element.nextElementSibling.value=element.value));
   document.querySelectorAll('[data-setting]').forEach(element => element.addEventListener('change',async()=>{state.settings[element.dataset.setting]=element.value;await commit(state,'AI設定を変更しました')}));
   document.querySelectorAll('[data-theory]').forEach(element => element.addEventListener('change',async()=>{state.settings.theories[element.dataset.theory]=element.checked;await commit(state,'分析理論を更新しました')}));
+  document.querySelectorAll('[data-integration-switch]').forEach(label => {
+    const input = label.querySelector('input[type="checkbox"]');
+    const text = label.querySelector('[data-switch-text]');
+    if (!input || !text) return;
+    input.addEventListener('change', async () => {
+      const channel = label.dataset.integrationSwitch;
+      const onText = channel === 'line' ? '準備ON' : '利用ON';
+      const offText = channel === 'line' ? '準備OFF' : '利用OFF';
+      text.textContent = input.checked ? onText : offText;
+      await saveIntegrationSettings({ message:`${channel === 'line' ? 'LINE連携準備' : '相棒専用GPT'}を${input.checked ? 'ON' : 'OFF'}にしました`, rerender:true });
+    });
+  });
   $('#profileForm')?.addEventListener('submit',async event => {
     event.preventDefault();
     const data = Object.fromEntries(new FormData(event.currentTarget));
@@ -698,7 +731,7 @@ async function saveIntegrationSettings({ message = 'AI連携設定を保存し�
   integrations.gpt = {
     ...integrations.gpt,
     enabled: Boolean($('#gptEnabled')?.checked),
-    connected: /^https:\/\/chatgpt\.com\//i.test(gptUrl),
+    connected: isCustomGptUrl(gptUrl),
     useActions: Boolean($('#gptUseActions')?.checked),
     gptUrl,
     scopes: currentScopes('gpt')
@@ -761,8 +794,8 @@ async function handleAction(action, element) {
     if (action === 'export-gpt-instructions') return exportGptArtifact('instructions');
     if (action === 'export-gpt-actions') return exportGptArtifact('actions');
     if (action === 'open-private-gpt') {
-      const url = ($('#gptUrl')?.value.trim() || state.settings.integrations.gpt.gptUrl || 'https://chatgpt.com/gpts');
-      if (!/^https:\/\/chatgpt\.com\//i.test(url)) throw new Error('ChatGPTの正しいGPT URLを入力してください');
+      const entered = $('#gptUrl')?.value.trim() || state.settings.integrations.gpt.gptUrl || '';
+      const url = isCustomGptUrl(entered) ? entered : 'https://chatgpt.com/gpts';
       window.open(url, '_blank', 'noopener,noreferrer'); return;
     }
     if (action === 'export-json') { downloadBlob(exportBackup(state),`LifeCompassAIOS_backup_${dateStamp()}.json`);toast('JSONバックアップを書き出しました');return; }
@@ -875,11 +908,11 @@ async function registerServiceWorker() {
   if (!('serviceWorker' in navigator)) return;
   const hadController = Boolean(navigator.serviceWorker.controller);
   try {
-    const registration = await navigator.serviceWorker.register('./sw.js?v=2.6.0', { updateViaCache:'none' });
+    const registration = await navigator.serviceWorker.register('./sw.js?v=2.6.1', { updateViaCache:'none' });
     await registration.update();
     if (hadController) {
       navigator.serviceWorker.addEventListener('controllerchange',()=>{
-        const refreshKey='life-compass-sw-refresh-v2.6.0';
+        const refreshKey='life-compass-sw-refresh-v2.6.1';
         if(sessionStorage.getItem(refreshKey))return;
         sessionStorage.setItem(refreshKey,'1');
         location.reload();
