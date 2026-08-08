@@ -12,6 +12,7 @@ export const DEFAULT_LINE_SCOPES = {
 };
 
 export const WISH_TYPES = ['欲しいもの', '行きたい場所', 'やってみたいこと・挑戦・体験'];
+export const WISH_AREAS = ['一般', '健康・身体', '医療', 'メンタル', '仕事・収入', '家族', 'その他'];
 export const EXPERIENCE_TYPES = ['挑戦・成長', '趣味・体験', '人生で一度は'];
 
 export function inferWishType(value = '') {

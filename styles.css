@@ -247,3 +247,37 @@ button:disabled{cursor:wait;opacity:.58}
 .badge.habit-other{background:#f0f2f5;color:#4c596a;border-color:#bfc7d1}
 .badge.habit-uncategorized{background:#fff4cc;color:#765800;border-color:#d8c36b}
 @media(max-width:700px){.task{flex-wrap:wrap}.task-badges{width:100%;justify-content:flex-start;padding-left:35px}}
+
+
+/* v2.9.0: 医療計画・医療分野 */
+.badge.wish-area-tag{border:1px solid transparent}
+.badge.wish-area-general{background:#eef2f7;color:#48586c;border-color:#c5cfdb}
+.badge.wish-area-body{background:#e6f6ed;color:#17643e;border-color:#91cca8}
+.badge.wish-area-medical{background:#e9f0ff;color:#164f9e;border-color:#8cafdf}
+.badge.wish-area-mental{background:#f2eaff;color:#6540a2;border-color:#bca1df}
+.badge.wish-area-income{background:#fff1d8;color:#825200;border-color:#e3bd72}
+.badge.wish-area-family{background:#fff0e7;color:#8a4824;border-color:#e7af91}
+.badge.wish-area-other{background:#f0f2f5;color:#4d5968;border-color:#c3cad2}
+.badge.health-type-tag{background:#e8f7f4;color:#0b655b;border:1px solid #8dcac2}
+.badge.medical-area{background:#e8efff;color:#164f9e;border:1px solid #91afe0}
+.badge.medical-facility{background:#eef8ff;color:#165d85;border:1px solid #94c7df}
+.badge.medical-impact{border:1px solid transparent}
+.badge.impact-low{background:#e8f7ed;color:#17633e;border-color:#9bcfb0}
+.badge.impact-medium{background:#fff2d7;color:#805000;border-color:#e5c17e}
+.badge.impact-high{background:#ffe5e8;color:#9b233b;border-color:#eba0ae}
+.medical-balance{margin-top:16px;border:2px solid #9db6df;background:linear-gradient(145deg,#f9fbff,#edf3ff)}
+.medical-balance-head{display:flex;align-items:flex-start;justify-content:space-between;gap:18px;margin-bottom:16px}
+.medical-balance-head h3{margin:8px 0 4px;font-size:20px}
+.medical-balance-head p{margin:0;color:var(--ink-2);font-weight:600;line-height:1.6}
+.medical-balance-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
+.medical-balance-grid>div{padding:14px;border:1px solid #c8d7ec;border-radius:15px;background:rgba(255,255,255,.86)}
+.medical-balance-grid small,.medical-balance-grid b,.medical-balance-grid span{display:block}
+.medical-balance-grid small{font-size:12px;font-weight:800;color:var(--ink-2)}
+.medical-balance-grid b{margin:6px 0 3px;font-size:20px;color:var(--ink)}
+.medical-balance-grid span{font-size:12px;font-weight:700;color:var(--ink-2);line-height:1.45}
+.medical-wish-grid .wish-group{position:relative}
+.medical-wish-grid .wish-group>.btn{margin:0 0 12px}
+.medical-wish-grid .record{padding:13px}
+.medical-wish-grid .record p{font-size:13px;line-height:1.55}
+@media(max-width:900px){.medical-balance-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:700px){.medical-balance-head{display:block}.medical-balance-head .btn{margin-top:12px}.medical-balance-grid{grid-template-columns:1fr 1fr}.medical-balance-grid>div{padding:12px}.medical-wish-grid{display:grid;grid-template-columns:1fr}.medical-wish-grid .wish-group{display:block}}

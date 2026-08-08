@@ -1,5 +1,5 @@
 import {
-  DOMAINS, THEORY_OPTIONS, PERSONAS, WISH_TYPES, EXPERIENCE_TYPES, createEmptyState, normalizeRecord,
+  DOMAINS, THEORY_OPTIONS, PERSONAS, WISH_TYPES, WISH_AREAS, EXPERIENCE_TYPES, createEmptyState, normalizeRecord,
   calculateLifeScore, todayTasks, isoNow, localDateKey, activeRows, reviewDue,
   normalizeExternalUrl, normalizeReferenceLinks, MAX_REFERENCE_LINKS
 } from './model.js';
@@ -37,6 +37,7 @@ const DETAIL_FIELDS = {
   habit:[['habitCategory','習慣の種類','select','|食事|運動|睡眠|健康管理|学習|仕事|生活|その他'],['frequency','頻度','select','毎日|週1回|週2回|週3回|平日|自由設定'],['target','続ける基準','text']],
   wish:[
     ['wishType','種類','select',WISH_TYPES.join('|')],
+    ['wishArea','分野','select',WISH_AREAS.join('|')],
     ['experienceType','挑戦・体験の種類（該当するとき）','select',`|${EXPERIENCE_TYPES.join('|')}`],
     ['targetDate','実現したい時期','date'],
     ['priority','優先度','select','高|中|低'],['budget','予算の目安','text'],
@@ -44,6 +45,12 @@ const DETAIL_FIELDS = {
     ['firstStep','最初の一歩','textarea'],['companion','一緒に実現したい人（任意）','text']
   ],
   healthItem:[
+    ['healthItemType','健康・医療の種類','select','症状・健康管理|治療・手術計画|検査・受診予定|メンタル|その他'],
+    ['medicalStatus','医療計画の状態','select','|情報収集中|相談予定|予約済み|方針決定|実施予定|経過観察|完了'],
+    ['facilityWishId','関連する病院・クリニック','medicalPlace',''],
+    ['department','診療科・担当科','text'],['targetDate','予定・目標日','date'],['estimatedCost','費用の目安','text'],
+    ['hospitalDays','入院・通院期間の目安','text'],['recoveryTime','回復・療養期間の目安','text'],
+    ['physicalImpact','身体への負担','select','|低|中|高'],['mentalImpact','メンタルへの負担','select','|低|中|高'],['incomeImpact','収入・仕事への影響','select','|低|中|高'],
     ['history','この項目の経過・これまで（個別情報）','textarea'],['current','現在の状態','textarea'],['ideal','理想状態','textarea'],
     ['improvements','考えられる改善方法','textarea'],['firstStep','まずやること','textarea'],
     ['ifNoChange','改善しない場合','textarea'],['doctorQuestions','専門医へ相談すること','textarea']
@@ -83,7 +90,7 @@ const PROFILE_REFERENCE_MAP = {
   simulation: ['values','constraints']
 };
 const PROFILE_REFERENCE_COPY = {
-  healthItem: '既往歴・現在の制約・必要な支援はプロフィールを正本として使います。健康カードには、その症状や項目だけの経過・現在・受診準備を記録します。',
+  healthItem: '既往歴・現在の制約・必要な支援はプロフィールを正本として使います。健康・医療カードには、症状の経過や手術・治療・受診計画など、その項目固有の情報だけを記録します。',
   goal: '価値観と現在の制約はプロフィールから参照します。目標カードには、この目標固有の期限・進捗・行動だけを記録します。',
   habit: '価値観と現在の制約はプロフィールから参照します。習慣カードには、頻度と続ける基準など、この習慣固有の情報だけを記録します。',
   comparison: '価値観と現在の制約はプロフィールから参照します。ここには過去・現在・新しい理想の差分だけを記録します。',
@@ -271,6 +278,49 @@ function habitCategoryMeta(row) {
   return { label, ...(HABIT_CATEGORY_META[label] || { icon:'?', className:'uncategorized' }) };
 }
 
+const MEDICAL_PLAN_TYPES = new Set(['治療・手術計画','検査・受診予定']);
+const MEDICAL_WISH_AREAS = new Set(['健康・身体','医療','メンタル']);
+
+function healthItemType(row) {
+  return String(row?.details?.healthItemType || '').trim() || '症状・健康管理';
+}
+
+function isMedicalPlan(row) {
+  return MEDICAL_PLAN_TYPES.has(healthItemType(row));
+}
+
+function medicalPlaceWishes() {
+  return activeRows(state.wishes).filter(row => row.details?.wishType === '行きたい場所' && row.details?.wishArea === '医療');
+}
+
+function wishAreaClass(value = '') {
+  if (value === '医療') return 'medical';
+  if (value === '健康・身体') return 'body';
+  if (value === 'メンタル') return 'mental';
+  if (value === '仕事・収入') return 'income';
+  if (value === '家族') return 'family';
+  if (value === 'その他') return 'other';
+  return 'general';
+}
+
+function relatedMedicalPlaceName(id = '') {
+  if (!id) return '';
+  return state.wishes.find(row => row.id === id && !row.deletedAt)?.title || '';
+}
+
+function impactBadge(label, value) {
+  if (!value) return '';
+  const cls = value === '高' ? 'high' : value === '中' ? 'medium' : 'low';
+  return `<span class="badge medical-impact impact-${cls}">${esc(label)} ${esc(value)}</span>`;
+}
+
+function medicalBalanceHtml(rows = []) {
+  const active = rows.filter(row => row.details?.medicalStatus !== '完了');
+  const count = (key, value) => active.filter(row => row.details?.[key] === value).length;
+  const next = [...active].filter(row => row.details?.targetDate).sort((a,b)=>String(a.details.targetDate).localeCompare(String(b.details.targetDate)))[0];
+  return `<div class="medical-balance card"><div class="medical-balance-head"><div><span class="badge medical-area">医療と生活のバランス</span><h3>身体・メンタル・収入への影響を一緒に見る</h3><p>各医療計画で自分が入力した負担度を整理して表示します。診断や予測ではありません。</p></div><button class="btn small secondary" data-page="income">収入画面を見る</button></div><div class="medical-balance-grid"><div><small>身体負担「高」</small><b>${count('physicalImpact','高')}件</b><span>中 ${count('physicalImpact','中')}件</span></div><div><small>メンタル負担「高」</small><b>${count('mentalImpact','高')}件</b><span>中 ${count('mentalImpact','中')}件</span></div><div><small>収入・仕事影響「高」</small><b>${count('incomeImpact','高')}件</b><span>中 ${count('incomeImpact','中')}件</span></div><div><small>次の医療予定</small><b>${next?displayDate(next.details.targetDate):'未設定'}</b><span>${next?esc(next.title):'予定日を登録すると表示'}</span></div></div></div>`;
+}
+
 function taskHtml(row) {
   const overdue = isOverdue(row);
   const habitMeta = row.kind === 'habit' ? habitCategoryMeta(row) : null;
@@ -358,7 +408,10 @@ function scoreGuideHtml() {
 }
 
 function mindMapLeaf(row, kind) {
-  return `<button class="mindmap-leaf" data-action="view-record" data-kind="${esc(kind)}" data-id="${esc(row.id)}" title="${esc(row.title)}を開く"><span>${esc(row.title)}</span>${kind==='goal' && row.details?.progress!==undefined?`<small>${Number(row.details.progress||0)}%</small>`:kind==='habit'?`<small>${esc(habitCategoryMeta(row).label)}</small>`:''}</button>`;
+  const sub = kind==='goal' && row.details?.progress!==undefined ? `${Number(row.details.progress||0)}%`
+    : kind==='habit' ? habitCategoryMeta(row).label
+    : kind==='wish' && row.details?.wishArea ? row.details.wishArea : '';
+  return `<button class="mindmap-leaf" data-action="view-record" data-kind="${esc(kind)}" data-id="${esc(row.id)}" title="${esc(row.title)}を開く"><span>${esc(row.title)}</span>${sub?`<small>${esc(sub)}</small>`:''}</button>`;
 }
 
 function mindMapBranch({label, icon, rows, kind, theme}) {
@@ -401,7 +454,7 @@ function renderLife() {
   const cards = `${sectionHead('理想との比較','過去の理想 → 現在 → 新しい理想を専用項目で整理','<button class="btn secondary" data-action="new-record" data-kind="comparison">＋ 比較を追加</button>')}${recordList(state.comparisons,'comparison')}
   ${sectionHead('目標と習慣','期限・進捗・頻度に加え、習慣は食事・運動など種類別に管理','<div class="btn-row"><button class="btn secondary" data-action="new-record" data-kind="goal">＋ 目標</button><button class="btn secondary" data-action="new-record" data-kind="habit">＋ 習慣</button></div>')}
   <div class="grid grid-2"><div class="card"><h3>目標</h3>${duplicateSummaryHtml(state.goals,'goal')}${activeRows(state.goals).map(taskHtml).join('')||'<div class="empty">目標はまだありません</div>'}</div><div class="card"><h3>習慣</h3>${duplicateSummaryHtml(state.habits,'habit')}${activeRows(state.habits).map(taskHtml).join('')||'<div class="empty">習慣はまだありません</div>'}</div></div>
-  ${sectionHead('夢・楽しみ','達成義務ではなく、これから叶えたいことを集める場所です。','<button class="btn secondary" data-action="new-record" data-kind="wish">＋ 夢・楽しみを追加</button>')}
+  ${sectionHead('夢・楽しみ','欲しいもの・場所・やりたいことに加え、一般／健康・身体／医療／メンタルなど分野も選べます。','<button class="btn secondary" data-action="new-record" data-kind="wish">＋ 夢・楽しみを追加</button>')}
   ${wishTabsHtml({wanted:wantedItems.length,place:wantedPlaces.length,experience:wantedExperiences.length})}
   <div class="grid grid-3 wish-grid"><section class="wish-group wish-wanted ${wishTab==='wanted'?'mobile-active':''}" data-wish-panel="wanted"><h3>欲しいもの</h3><p>手に入れたい物や暮らしの道具</p>${duplicateSummaryHtml(wantedItems,'wish')}${wantedItems.length?`<div class="record-list">${wantedItems.map(row=>recordCard(row,'wish')).join('')}</div>`:'<div class="empty">欲しいものはまだありません</div>'}</section><section class="wish-group wish-place ${wishTab==='place'?'mobile-active':''}" data-wish-panel="place"><h3>行きたい場所</h3><p>旅先、店、施設、訪れたい地域</p>${duplicateSummaryHtml(wantedPlaces,'wish')}${wantedPlaces.length?`<div class="record-list">${wantedPlaces.map(row=>recordCard(row,'wish')).join('')}</div>`:'<div class="empty">行きたい場所はまだありません</div>'}</section><section class="wish-group wish-experience ${wishTab==='experience'?'mobile-active':''}" data-wish-panel="experience"><h3>やってみたいこと・挑戦・体験</h3><p>成長のための挑戦から、純粋に楽しむ体験まで</p>${duplicateSummaryHtml(wantedExperiences,'wish')}${wantedExperiences.length?`<div class="record-list">${wantedExperiences.map(row=>recordCard(row,'wish')).join('')}</div>`:'<div class="empty">やってみたいことはまだありません</div>'}</section></div>`;
   return `<div class="page-enter">${sectionHead('人生レーダー','自分で付ける現在の満足度です。初期値は50点、人生スコアは8項目の平均です。','<button class="btn" data-action="save-scores">点数を保存</button>')}
@@ -412,10 +465,21 @@ function renderLife() {
 }
 
 function renderHealth() {
-  return `<div class="page-enter"><div class="hero"><div class="hero-grid"><div><span class="badge">HEALTH COMPASS</span><h2>診断ではなく、整理と受診準備を。</h2><p>プロフィールの既往歴を土台にして、症状ごとの現在・経過・受診準備を重複なく管理します。</p><button class="btn secondary" data-action="new-record" data-kind="healthItem">健康項目を追加</button></div><div class="life-score">${state.scores.health}<small>HEALTH</small></div></div></div>
+  const healthRows = activeRows(state.healthItems);
+  const medicalPlans = healthRows.filter(isMedicalPlan);
+  const regularHealth = healthRows.filter(row => !isMedicalPlan(row));
+  const medicalWishes = activeRows(state.wishes).filter(row => MEDICAL_WISH_AREAS.has(String(row.details?.wishArea || '')));
+  const medicalWanted = medicalWishes.filter(row => (row.details?.wishType || '欲しいもの') === '欲しいもの');
+  const medicalPlaces = medicalWishes.filter(row => row.details?.wishType === '行きたい場所' && row.details?.wishArea === '医療');
+  const medicalExperiences = medicalWishes.filter(row => row.details?.wishType === 'やってみたいこと・挑戦・体験');
+  return `<div class="page-enter"><div class="hero"><div class="hero-grid"><div><span class="badge">HEALTH & MEDICAL COMPASS</span><h2>健康の記録と、これからの医療計画を分けて整理。</h2><p>既往歴はプロフィールを正本にし、症状の経過、手術・治療・検査の予定、病院候補、身体・メンタル・収入への影響を一つにつなぎます。</p><div class="btn-row"><button class="btn secondary" data-action="new-record" data-kind="healthItem" data-health-type="症状・健康管理">＋ 健康項目</button><button class="btn" data-action="new-record" data-kind="healthItem" data-health-type="治療・手術計画">＋ 手術・治療計画</button></div></div><div class="life-score">${state.scores.health}<small>HEALTH</small></div></div></div>
   ${sectionHead('健康の基本情報','既往歴などはプロフィールを正本として自動参照します。ここで同じ内容を入力し直す必要はありません。')}${profileReferenceHtml('healthItem',{context:'page'})}
-  ${sectionHead('健康項目','視力・腰痛・血圧など、項目ごとの変化・現在・受診準備を管理')}${recordList(state.healthItems,'healthItem')}
-  ${sectionHead('健康AIサポート','医療診断は行いません。緊急性がある症状は医療機関へ。')}${aiComposer('health','プロフィールの既往歴と各健康項目を重複なく参照し、現在の健康課題を整理して、改善方法・まずやること・改善しない場合・専門医への相談事項を分けてください。')}</div>`;
+  ${sectionHead('現在の健康・メンタル','症状、血圧、視力、腰、日々の健康管理やメンタルの変化を記録','<div class="btn-row"><button class="btn secondary" data-action="new-record" data-kind="healthItem" data-health-type="症状・健康管理">＋ 症状・健康</button><button class="btn secondary" data-action="new-record" data-kind="healthItem" data-health-type="メンタル">＋ メンタル</button></div>')}${recordList(regularHealth,'healthItem')}
+  ${sectionHead('医療計画','将来の手術・治療・検査・受診を、予定日や負担まで含めて管理','<div class="btn-row"><button class="btn" data-action="new-record" data-kind="healthItem" data-health-type="治療・手術計画">＋ 手術・治療</button><button class="btn secondary" data-action="new-record" data-kind="healthItem" data-health-type="検査・受診予定">＋ 検査・受診</button></div>')}${medicalPlans.length?recordList(medicalPlans,'healthItem'):'<div class="empty">医療計画はまだありません。将来予定している手術や検査をここへ追加できます。</div>'}
+  ${medicalBalanceHtml(medicalPlans)}
+  ${sectionHead('医療に関する「欲しい・行きたい・やりたい」','人生設計で「分野＝医療／健康・身体／メンタル」にした項目を自動表示します。同じ内容を二重登録しません。','<button class="btn secondary" data-page="life">人生設計で全件を見る</button>')}
+  <div class="grid grid-3 medical-wish-grid"><section class="wish-group wish-wanted"><h3>医療・健康で欲しいもの</h3><p>レンズ、補助具、治療に必要な物など</p><button class="btn small secondary" data-action="new-record" data-kind="wish" data-wish-type="欲しいもの" data-wish-area="医療">＋ 追加</button>${medicalWanted.length?`<div class="record-list">${medicalWanted.map(row=>recordCard(row,'wish')).join('')}</div>`:'<div class="empty">まだありません</div>'}</section><section class="wish-group wish-place"><h3>病院・クリニック候補</h3><p>受診したい病院、専門クリニック、セカンドオピニオン先</p><button class="btn small secondary" data-action="new-record" data-kind="wish" data-wish-type="行きたい場所" data-wish-area="医療">＋ 病院・クリニック</button>${medicalPlaces.length?`<div class="record-list">${medicalPlaces.map(row=>recordCard(row,'wish')).join('')}</div>`:'<div class="empty">まだありません</div>'}</section><section class="wish-group wish-experience"><h3>受けたい治療・検査・医療体験</h3><p>情報収集中の治療、検査、相談したいことなど</p><button class="btn small secondary" data-action="new-record" data-kind="wish" data-wish-type="やってみたいこと・挑戦・体験" data-wish-area="医療">＋ 追加</button>${medicalExperiences.length?`<div class="record-list">${medicalExperiences.map(row=>recordCard(row,'wish')).join('')}</div>`:'<div class="empty">まだありません</div>'}</section></div>
+  ${sectionHead('健康・医療AIサポート','医療診断は行いません。医療計画・身体負担・メンタル負担・収入への影響を整理します。')}${aiComposer('health','プロフィールの既往歴、現在の健康項目、手術・治療・検査の医療計画、医療分野の欲しいもの・病院候補・やりたいこと、収入記録を重複なく参照してください。診断はせず、事実と未確定情報を分け、身体への負担、メンタルへの負担、収入・仕事への影響、医師に確認すること、今準備することを整理してください。')}</div>`;
 }
 
 function incomeRows() {
@@ -642,7 +706,7 @@ function recordCard(row, fallbackKind) {
   const incomeCard = kind === 'incomeRecord' || row.domain === 'income';
   const incomeAmountHtml = incomeCard && row.details?.amount !== undefined && row.details?.amount !== ''
     ? `<strong class="income-card-amount">${incomeYen(incomeAmount(row))}</strong>` : '';
-  return `<article class="record ${wishClass} ${incomeCard?'income-record':''} ${completed?'completed':''}">${completed?`<span class="completion-ribbon">✓ ${completionLabel}</span>`:''}<span class="record-date">${displayDate(row.date)}</span><div><span class="badge">${esc(domainLabel(row.domain))}</span><h3>${esc(row.title)}</h3>${incomeAmountHtml}<p>${esc(row.body)}</p>${progress!==null?`<div class="progress" title="進捗 ${progress}%"><i style="width:${Math.max(0,Math.min(100,progress))}%"></i></div>`:''}<div class="record-meta">${row.details?.incomeType?`<span class="badge income-type-tag">${esc(row.details.incomeType)}</span>`:''}${row.details?.sourceName?`<span class="badge">収入元 ${esc(row.details.sourceName)}</span>`:''}${row.details?.incomePeriod?`<span class="badge">${esc(row.details.incomePeriod)}</span>`:''}${row.details?.incomeStatus?`<span class="badge ${row.details.incomeStatus==='見込'?'warn':row.details.incomeStatus==='確定'?'completion':''}">${esc(row.details.incomeStatus)}</span>`:''}${row.details?.amountKind?`<span class="badge">${esc(row.details.amountKind)}</span>`:''}${row.details?.wishType?`<span class="badge wish-type-tag ${wishClass}">${esc(row.details.wishType)}</span>`:''}${row.details?.experienceType?`<span class="badge">${esc(row.details.experienceType)}</span>`:''}${row.details?.wishStatus?`<span class="badge ${row.details.wishStatus==='実現済み'?'completion':''}">${esc(row.details.wishStatus)}</span>`:''}${row.details?.goalStatus?`<span class="badge ${row.details.goalStatus==='達成済み'?'completion':''}">${esc(row.details.goalStatus)}</span>`:''}${row.details?.priority?`<span class="badge ${row.details.priority==='高'?'warn':''}">優先度 ${esc(row.details.priority)}</span>`:''}${row.details?.frequency?`<span class="badge">${esc(row.details.frequency)}</span>`:''}${row.details?.budget?`<span class="badge">予算 ${esc(row.details.budget)}</span>`:''}</div>${referenceLinksHtml(row.details,true)}${attachments.map(file=>`<a class="attachment-link" href="${esc(file.url)}" target="_blank" rel="noopener noreferrer">添付：${esc(file.name)}</a>`).join('')}</div><div class="record-actions"><button class="btn small ghost" data-action="view-record" data-kind="${esc(kind)}" data-id="${esc(row.id)}">見る</button><button class="btn small ghost" data-action="edit-record" data-kind="${esc(kind)}" data-id="${esc(row.id)}">編集</button><button class="btn small danger" data-action="delete-record" data-kind="${esc(kind)}" data-id="${esc(row.id)}">削除</button></div></article>`;
+  return `<article class="record ${wishClass} ${incomeCard?'income-record':''} ${completed?'completed':''}">${completed?`<span class="completion-ribbon">✓ ${completionLabel}</span>`:''}<span class="record-date">${displayDate(row.date)}</span><div><span class="badge">${esc(domainLabel(row.domain))}</span><h3>${esc(row.title)}</h3>${incomeAmountHtml}<p>${esc(row.body)}</p>${progress!==null?`<div class="progress" title="進捗 ${progress}%"><i style="width:${Math.max(0,Math.min(100,progress))}%"></i></div>`:''}<div class="record-meta">${row.details?.incomeType?`<span class="badge income-type-tag">${esc(row.details.incomeType)}</span>`:''}${row.details?.sourceName?`<span class="badge">収入元 ${esc(row.details.sourceName)}</span>`:''}${row.details?.incomePeriod?`<span class="badge">${esc(row.details.incomePeriod)}</span>`:''}${row.details?.incomeStatus?`<span class="badge ${row.details.incomeStatus==='見込'?'warn':row.details.incomeStatus==='確定'?'completion':''}">${esc(row.details.incomeStatus)}</span>`:''}${row.details?.amountKind?`<span class="badge">${esc(row.details.amountKind)}</span>`:''}${row.details?.wishType?`<span class="badge wish-type-tag ${wishClass}">${esc(row.details.wishType)}</span>`:''}${row.details?.wishArea?`<span class="badge wish-area-tag wish-area-${wishAreaClass(row.details.wishArea)}">${esc(row.details.wishArea)}</span>`:''}${row.details?.experienceType?`<span class="badge">${esc(row.details.experienceType)}</span>`:''}${kind==='healthItem'?`<span class="badge health-type-tag">${esc(healthItemType(row))}</span>`:''}${row.details?.medicalStatus?`<span class="badge ${row.details.medicalStatus==='完了'?'done':row.details.medicalStatus==='実施予定'?'warn':''}">${esc(row.details.medicalStatus)}</span>`:''}${row.details?.facilityWishId&&relatedMedicalPlaceName(row.details.facilityWishId)?`<span class="badge medical-facility">医療機関 ${esc(relatedMedicalPlaceName(row.details.facilityWishId))}</span>`:''}${impactBadge('身体',row.details?.physicalImpact)}${impactBadge('メンタル',row.details?.mentalImpact)}${impactBadge('収入',row.details?.incomeImpact)}${row.details?.wishStatus?`<span class="badge ${row.details.wishStatus==='実現済み'?'completion':''}">${esc(row.details.wishStatus)}</span>`:''}${row.details?.goalStatus?`<span class="badge ${row.details.goalStatus==='達成済み'?'completion':''}">${esc(row.details.goalStatus)}</span>`:''}${row.details?.priority?`<span class="badge ${row.details.priority==='高'?'warn':''}">優先度 ${esc(row.details.priority)}</span>`:''}${row.details?.frequency?`<span class="badge">${esc(row.details.frequency)}</span>`:''}${row.details?.budget?`<span class="badge">予算 ${esc(row.details.budget)}</span>`:''}</div>${referenceLinksHtml(row.details,true)}${attachments.map(file=>`<a class="attachment-link" href="${esc(file.url)}" target="_blank" rel="noopener noreferrer">添付：${esc(file.name)}</a>`).join('')}</div><div class="record-actions"><button class="btn small ghost" data-action="view-record" data-kind="${esc(kind)}" data-id="${esc(row.id)}">見る</button><button class="btn small ghost" data-action="edit-record" data-kind="${esc(kind)}" data-id="${esc(row.id)}">編集</button><button class="btn small danger" data-action="delete-record" data-kind="${esc(kind)}" data-id="${esc(row.id)}">削除</button></div></article>`;
 }
 
 function render() {
@@ -702,21 +766,27 @@ function bindPage() {
 function detailFieldHtml(kind, details = {}) {
   return (DETAIL_FIELDS[kind] || []).map(([key,label,type,options]) => {
     const value = details[key] ?? '';
-    if (type === 'textarea') return `<div class="field full"><label>${label}</label><textarea name="detail__${key}">${esc(value)}</textarea></div>`;
-    if (type === 'select') return `<div class="field"><label>${label}</label><select name="detail__${key}">${String(options).split('|').map(option=>`<option value="${esc(option)}" ${String(value)===option?'selected':''}>${option===''?'選択してください':option==='weekly'?'週間':option==='monthly'?'月間':option==='yearly'?'年間':esc(option)}</option>`).join('')}</select></div>`;
+    if (type === 'textarea') return `<div class="field full" data-detail-field="${esc(key)}"><label>${label}</label><textarea name="detail__${key}">${esc(value)}</textarea></div>`;
+    if (type === 'select') return `<div class="field" data-detail-field="${esc(key)}"><label>${label}</label><select name="detail__${key}">${String(options).split('|').map(option=>`<option value="${esc(option)}" ${String(value)===option?'selected':''}>${option===''?'選択してください':option==='weekly'?'週間':option==='monthly'?'月間':option==='yearly'?'年間':esc(option)}</option>`).join('')}</select></div>`;
+    if (type === 'medicalPlace') {
+      const places = medicalPlaceWishes();
+      return `<div class="field" data-detail-field="${esc(key)}"><label>${label}</label><select name="detail__${key}"><option value="">選択しない</option>${places.map(place=>`<option value="${esc(place.id)}" ${String(value)===place.id?'selected':''}>${esc(place.title)}</option>`).join('')}</select><span class="hint">「人生設計 → 行きたい場所」で分野を「医療」にした病院・クリニックから選べます。</span></div>`;
+    }
     const numberLimits = type === 'number' ? (['energy','progress'].includes(key) ? 'min="0" max="100"' : 'min="0" step="1"') : '';
-    return `<div class="field"><label>${label}</label><input name="detail__${key}" type="${type}" value="${esc(value)}" ${numberLimits}></div>`;
+    return `<div class="field" data-detail-field="${esc(key)}"><label>${label}</label><input name="detail__${key}" type="${type}" value="${esc(value)}" ${numberLimits}></div>`;
   }).join('');
 }
 
-function openRecordDialog(kind, id = '') {
+function openRecordDialog(kind, id = '', preset = {}) {
   const key = collectionFor(kind);
   if (!key) return toast('未対応の記録種類です','error');
   const existing = id ? state[key].find(row => row.id === id) : null;
+  const seedDetails = existing?.details || preset.details || {};
   const dialog = $('#recordDialog');
   const titlePlaceholder = kind === 'wish' ? '例：キャンピングカー、北海道旅行、Kindle出版'
     : kind === 'incomeRecord' ? '例：給与、傷病手当、副業売上、年金'
     : kind === 'habit' ? '例：朝食を食べる、30分歩く、23時までに寝る'
+    : kind === 'healthItem' ? '例：左目の状態、角膜手術の計画、大学病院への受診'
     : '例：朝の血圧、今月の目標、事業アイデア';
   const bodyPlaceholder = kind === 'wish' ? '欲しいもの・場所・挑戦・体験と、叶えたいイメージを自由に書いてください'
     : kind === 'incomeRecord' ? '入金条件・期間・変動理由など、必要な補足だけを書いてください'
@@ -726,12 +796,13 @@ function openRecordDialog(kind, id = '') {
     : '関連URL（参考ページ・地図・予約ページなど）';
   const titleLabel = kind === 'incomeRecord' ? '収入名' : 'タイトル';
   const bodyLabel = kind === 'incomeRecord' ? '補足・メモ' : '概要・自由メモ';
+  const selectedDomain = existing?.domain || preset.domain || defaultDomain(kind);
   const domainField = kind === 'incomeRecord'
     ? '<div class="field"><label>分野</label><div class="locked-field">収入</div><input name="domain" type="hidden" value="income"></div>'
-    : `<div class="field"><label>関連する分野</label><select name="domain">${DOMAINS.map(domain=>`<option value="${domain.id}" ${(existing?.domain || defaultDomain(kind))===domain.id?'selected':''}>${domain.label}</option>`).join('')}</select></div>`;
+    : `<div class="field"><label>関連する分野</label><select name="domain">${DOMAINS.map(domain=>`<option value="${domain.id}" ${selectedDomain===domain.id?'selected':''}>${domain.label}</option>`).join('')}</select></div>`;
   const existingLinks = normalizeReferenceLinks(existing?.details || {});
-  const editorLinks = existingLinks.length ? existingLinks : [{}];
-  dialog.innerHTML = `<form id="recordForm"><div class="modal-head"><div><span class="badge">${existing?'編集':'新規'}</span><h2>${esc(KIND_LABELS[kind])}</h2></div><button class="icon-btn" type="button" data-close>×</button></div><div class="modal-body form-grid"><input type="hidden" name="kind" value="${kind}"><div class="field"><label>日付</label><input name="date" type="date" value="${esc(existing?.date || localDateKey())}" required></div>${domainField}<div class="field full"><label>${titleLabel}</label><input name="title" value="${esc(existing?.title || '')}" required placeholder="${titlePlaceholder}"></div><div class="field full"><label>${bodyLabel}</label><textarea name="body" placeholder="${bodyPlaceholder}">${esc(existing?.body || '')}</textarea></div>${profileReferenceHtml(kind,{context:'editor'})}${detailFieldHtml(kind,existing?.details)}<div class="field full reference-links-field"><label>${urlLabel}（最大${MAX_REFERENCE_LINKS}件）</label><div id="referenceLinkRows" class="reference-link-editor">${editorLinks.map(referenceLinkEditorRow).join('')}</div><button class="btn small secondary add-reference" type="button" data-add-reference>＋ リンクを追加</button><span class="hint">公式サイト・SNS・YouTube・地図・予約／購入ページなど。名前は自由、https://は省略できます。</span></div><div class="field full"><label>タグ</label><input name="tags" value="${esc((existing?.tags||[]).join('、'))}" placeholder="${kind==='incomeRecord'?'給与、年金、副収入 など':kind==='habit'?'食事、ウォーキング、睡眠 など':'健康、挑戦、家族 など'}"></div><div class="field full duplicate-editor-slot" id="duplicateEditorSlot" hidden></div><div class="field full"><label>${kind==='incomeRecord'?'明細画像・添付':'画像・添付'}（任意・8MB以下）</label><input name="attachment" type="file"><span class="hint">添付はGoogle Driveへ保存します。同期設定が必要です。</span></div><p class="mobile-sheet-note field full">下へスクロールすると保存ボタンがあります。</p></div><div class="modal-actions"><button class="btn ghost" type="button" data-close>キャンセル</button><button class="btn" type="submit">${existing?'更新する':'保存する'}</button></div></form>`;
+  const editorLinks = existingLinks.length ? existingLinks : (preset.referenceLinks?.length ? preset.referenceLinks : [{}]);
+  dialog.innerHTML = `<form id="recordForm"><div class="modal-head"><div><span class="badge">${existing?'編集':'新規'}</span><h2>${esc(KIND_LABELS[kind])}</h2></div><button class="icon-btn" type="button" data-close>×</button></div><div class="modal-body form-grid"><input type="hidden" name="kind" value="${kind}"><div class="field"><label>日付</label><input name="date" type="date" value="${esc(existing?.date || preset.date || localDateKey())}" required></div>${domainField}<div class="field full"><label>${titleLabel}</label><input name="title" value="${esc(existing?.title || preset.title || '')}" required placeholder="${titlePlaceholder}"></div><div class="field full"><label>${bodyLabel}</label><textarea name="body" placeholder="${bodyPlaceholder}">${esc(existing?.body || preset.body || '')}</textarea></div>${profileReferenceHtml(kind,{context:'editor'})}${detailFieldHtml(kind,seedDetails)}<div class="field full reference-links-field"><label>${urlLabel}（最大${MAX_REFERENCE_LINKS}件）</label><div id="referenceLinkRows" class="reference-link-editor">${editorLinks.map(referenceLinkEditorRow).join('')}</div><button class="btn small secondary add-reference" type="button" data-add-reference>＋ リンクを追加</button><span class="hint">公式サイト・SNS・YouTube・地図・予約／購入ページなど。名前は自由、https://は省略できます。</span></div><div class="field full"><label>タグ</label><input name="tags" value="${esc((existing?.tags||[]).join('、'))}" placeholder="${kind==='incomeRecord'?'給与、年金、副収入 など':kind==='habit'?'食事、ウォーキング、睡眠 など':'健康、挑戦、家族 など'}"></div><div class="field full duplicate-editor-slot" id="duplicateEditorSlot" hidden></div><div class="field full"><label>${kind==='incomeRecord'?'明細画像・添付':'画像・添付'}（任意・8MB以下）</label><input name="attachment" type="file"><span class="hint">添付はGoogle Driveへ保存します。同期設定が必要です。</span></div><p class="mobile-sheet-note field full">下へスクロールすると保存ボタンがあります。</p></div><div class="modal-actions"><button class="btn ghost" type="button" data-close>キャンセル</button><button class="btn" type="submit">${existing?'更新する':'保存する'}</button></div></form>`;
   dialog.showModal();
   dialog.querySelectorAll('[data-close]').forEach(button => button.onclick=()=>dialog.close());
   const linkRows = dialog.querySelector('#referenceLinkRows');
@@ -773,13 +844,35 @@ function openRecordDialog(kind, id = '') {
   if (kind === 'wish') {
     const typeSelect = dialog.querySelector('[name="detail__wishType"]');
     const subtypeSelect = dialog.querySelector('[name="detail__experienceType"]');
+    const areaSelect = dialog.querySelector('[name="detail__wishArea"]');
+    const domainSelect = dialog.querySelector('[name="domain"]');
     const updateSubtypeVisibility = () => {
       const applies = typeSelect.value === 'やってみたいこと・挑戦・体験';
       subtypeSelect.closest('.field').hidden = !applies;
       if (!applies) subtypeSelect.value = '';
     };
+    const updateWishDomain = () => {
+      if (!existing && domainSelect && ['健康・身体','医療','メンタル'].includes(areaSelect?.value)) domainSelect.value = 'health';
+    };
     typeSelect.addEventListener('change', updateSubtypeVisibility);
+    areaSelect?.addEventListener('change', updateWishDomain);
     updateSubtypeVisibility();
+    updateWishDomain();
+  }
+  if (kind === 'healthItem') {
+    const typeSelect = dialog.querySelector('[name="detail__healthItemType"]');
+    const medicalKeys = ['medicalStatus','facilityWishId','department','targetDate','estimatedCost','hospitalDays','recoveryTime','physicalImpact','mentalImpact','incomeImpact'];
+    const updateMedicalVisibility = () => {
+      const applies = MEDICAL_PLAN_TYPES.has(typeSelect?.value || '');
+      medicalKeys.forEach(key => {
+        const field = dialog.querySelector(`[data-detail-field="${key}"]`);
+        if (!field) return;
+        field.hidden = !applies;
+        if (!applies && !existing) field.querySelector('input,select,textarea')?.setAttribute('data-clear-on-save','true');
+      });
+    };
+    typeSelect?.addEventListener('change', updateMedicalVisibility);
+    updateMedicalVisibility();
   }
   $('#recordForm').addEventListener('submit', async event => {
     event.preventDefault();
@@ -814,6 +907,11 @@ function openRecordDialog(kind, id = '') {
       }
     }
     if (kind === 'wish' && details.wishType !== 'やってみたいこと・挑戦・体験') delete details.experienceType;
+    if (kind === 'wish' && !details.wishArea) details.wishArea = '一般';
+    if (kind === 'healthItem' && !details.healthItemType) details.healthItemType = '症状・健康管理';
+    if (kind === 'healthItem' && !MEDICAL_PLAN_TYPES.has(details.healthItemType)) {
+      for (const key of ['medicalStatus','facilityWishId','department','targetDate','estimatedCost','hospitalDays','recoveryTime','physicalImpact','mentalImpact','incomeImpact']) delete details[key];
+    }
     const duplicateCandidate = { title:raw.title, body:raw.body, tags:raw.tags, details };
     const duplicateMatches = duplicateCheckEnabled(kind) ? findDuplicateCandidates(state[key], duplicateCandidate, kind, existing?.id || '') : [];
     if (duplicateMatches.length && !window.confirm(`似た登録が${duplicateMatches.length}件あります。\n\n${duplicateMatches.slice(0,3).map(match=>`・${match.row.title}（${match.reasons.join('・')}）`).join('\n')}\n\n別の内容として、このまま保存しますか？`)) {
@@ -841,6 +939,11 @@ function openRecordDialog(kind, id = '') {
   });
 }
 
+function detailDisplayValue(key, value) {
+  if (key === 'facilityWishId') return relatedMedicalPlaceName(value) || value;
+  return value;
+}
+
 function defaultDomain(kind) {
   if (kind === 'healthItem') return 'health';
   if (kind === 'incomeRecord') return 'income';
@@ -854,7 +957,7 @@ function showRecord(kind,id) {
   const row = state[collectionFor(kind)]?.find(item=>item.id===id);
   if (!row) return;
   const links = normalizeReferenceLinks(row.details || {});
-  const detailRows = Object.entries(row.details || {}).filter(([key,value]) => value && !['attachments','referenceUrl','referenceLinks'].includes(key)).map(([key,value])=>`<div class="detail-row"><small>${esc(DETAIL_LABELS[key]||key)}</small><p>${esc(value)}</p></div>`).join('');
+  const detailRows = Object.entries(row.details || {}).filter(([key,value]) => value && !['attachments','referenceUrl','referenceLinks'].includes(key)).map(([key,value])=>`<div class="detail-row"><small>${esc(DETAIL_LABELS[key]||key)}</small><p>${esc(detailDisplayValue(key,value))}</p></div>`).join('');
   const attachments = (row.details?.attachments || []).map(file=>`<a class="attachment-link" href="${esc(file.url)}" target="_blank" rel="noopener noreferrer">${esc(file.name)}</a>`).join('');
   const dialog = $('#detailDialog');
   const linkDetails = links.length ? `<div class="detail-row"><small>関連URL（${links.length}件）</small><div class="reference-links detail-links">${links.map(link => `<div><a class="reference-link" href="${esc(link.url)}" target="_blank" rel="noopener noreferrer">↗ ${esc(link.label)}</a><p class="url-text">${esc(link.url)}</p></div>`).join('')}</div></div>` : '';
@@ -932,7 +1035,14 @@ function exportGptArtifact(type) {
 
 async function handleAction(action, element) {
   try {
-    if (action === 'new-record') return openRecordDialog(element.dataset.kind);
+    if (action === 'new-record') {
+      const details = {};
+      if (element.dataset.healthType) details.healthItemType = element.dataset.healthType;
+      if (element.dataset.wishType) details.wishType = element.dataset.wishType;
+      if (element.dataset.wishArea) details.wishArea = element.dataset.wishArea;
+      const presetDomain = element.dataset.wishArea && ['健康・身体','医療','メンタル'].includes(element.dataset.wishArea) ? 'health' : '';
+      return openRecordDialog(element.dataset.kind, '', { details, ...(presetDomain ? { domain:presetDomain } : {}) });
+    }
     if (action === 'edit-profile-context') return goToProfileField(element.dataset.profileFocus || '');
     if (action === 'edit-record') return openRecordDialog(element.dataset.kind,element.dataset.id);
     if (action === 'view-record') return showRecord(element.dataset.kind,element.dataset.id);
@@ -1083,11 +1193,11 @@ async function registerServiceWorker() {
   if (!('serviceWorker' in navigator)) return;
   const hadController = Boolean(navigator.serviceWorker.controller);
   try {
-    const registration = await navigator.serviceWorker.register('./sw.js?v=2.8.1', { updateViaCache:'none' });
+    const registration = await navigator.serviceWorker.register('./sw.js?v=2.9.0', { updateViaCache:'none' });
     await registration.update();
     if (hadController) {
       navigator.serviceWorker.addEventListener('controllerchange',()=>{
-        const refreshKey='life-compass-sw-refresh-v2.8.1';
+        const refreshKey='life-compass-sw-refresh-v2.9.0';
         if(sessionStorage.getItem(refreshKey))return;
         sessionStorage.setItem(refreshKey,'1');
         location.reload();
