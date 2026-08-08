@@ -42,7 +42,7 @@ const DETAIL_FIELDS = {
     ['firstStep','最初の一歩','textarea'],['companion','一緒に実現したい人（任意）','text']
   ],
   healthItem:[
-    ['history','既往歴・これまで','textarea'],['current','現在の状態','textarea'],['ideal','理想状態','textarea'],
+    ['history','この項目の経過・これまで（個別情報）','textarea'],['current','現在の状態','textarea'],['ideal','理想状態','textarea'],
     ['improvements','考えられる改善方法','textarea'],['firstStep','まずやること','textarea'],
     ['ifNoChange','改善しない場合','textarea'],['doctorQuestions','専門医へ相談すること','textarea']
   ],
@@ -62,6 +62,24 @@ const PROFILE_FIELDS = [
   ['constraints','現在の制約','textarea'],['supportNeeds','必要な支援','textarea'],
   ['satisfaction','現在の満足度','text'],['notes','自由メモ','textarea']
 ];
+
+const PROFILE_LABELS = Object.fromEntries(PROFILE_FIELDS.map(([id,label]) => [id,label]));
+const PROFILE_REFERENCE_MAP = {
+  healthItem: ['medicalHistory','constraints','supportNeeds'],
+  goal: ['values','constraints'],
+  habit: ['values','constraints'],
+  comparison: ['values','constraints'],
+  product: ['strengths','workHistory','values','constraints'],
+  simulation: ['values','constraints']
+};
+const PROFILE_REFERENCE_COPY = {
+  healthItem: '既往歴・現在の制約・必要な支援はプロフィールを正本として使います。健康カードには、その症状や項目だけの経過・現在・受診準備を記録します。',
+  goal: '価値観と現在の制約はプロフィールから参照します。目標カードには、この目標固有の期限・進捗・行動だけを記録します。',
+  habit: '価値観と現在の制約はプロフィールから参照します。習慣カードには、頻度と続ける基準など、この習慣固有の情報だけを記録します。',
+  comparison: '価値観と現在の制約はプロフィールから参照します。ここには過去・現在・新しい理想の差分だけを記録します。',
+  product: '強み・実績・仕事歴・価値観・制約はプロフィールから参照します。商品カードには顧客・課題・提供内容・検証など商品固有の情報だけを記録します。',
+  simulation: '価値観と現在の制約はプロフィールから参照します。シミュレーションには今回変える条件と前提だけを記録します。'
+};
 
 const validPage = next => PAGES.some(([id]) => id === next) || EXTRA_PAGES.includes(next) ? next : 'home';
 
@@ -168,6 +186,36 @@ function updateChrome(status = '') {
 
 function sectionHead(title, sub = '', action = '') {
   return `<div class="section-head"><div><h2>${esc(title)}</h2>${sub?`<p>${esc(sub)}</p>`:''}</div>${action}</div>`;
+}
+
+function profileReferenceHtml(kind, { context = 'editor' } = {}) {
+  const keys = PROFILE_REFERENCE_MAP[kind] || [];
+  if (!keys.length) return '';
+  const rows = keys.map(key => ({ key, label: PROFILE_LABELS[key] || key, value: String(state.profile[key] || '').trim() }));
+  const filled = rows.filter(row => row.value);
+  const focusKey = filled[0]?.key || keys[0];
+  const pageClass = context === 'page' ? ' profile-reference-page' : '';
+  const values = filled.length
+    ? filled.map(row => `<div class="profile-reference-item"><small>${esc(row.label)}</small><p>${esc(row.value)}</p></div>`).join('')
+    : `<div class="profile-reference-empty">関連するプロフィール情報はまだ未入力です。プロフィールに一度登録すれば、ここへ自動表示されます。</div>`;
+  return `<section class="profile-reference${pageClass}" aria-label="プロフィールから自動参照する基本情報"><div class="profile-reference-head"><div><span class="badge profile-source">プロフィール連携</span><h3>基本情報はプロフィールから自動参照</h3><p>${esc(PROFILE_REFERENCE_COPY[kind] || '繰り返し入力せず、プロフィールを正本として参照します。')}</p></div><button class="btn small secondary" type="button" data-action="edit-profile-context" data-profile-focus="${esc(focusKey)}">プロフィールを確認・編集</button></div><div class="profile-reference-grid">${values}</div>${context === 'editor' ? '<p class="profile-reference-note">※ 上の内容はこのカードへコピー保存しません。プロフィールを修正すると、ここにも最新内容が反映されます。</p>' : ''}</section>`;
+}
+
+function goToProfileField(field = '') {
+  document.querySelectorAll('dialog[open]').forEach(dialog => dialog.close());
+  page = 'profile';
+  history.replaceState(null,'','#profile');
+  render();
+  setSidebarOpen(false);
+  requestAnimationFrame(() => {
+    const target = field ? document.querySelector(`#p-${field}`) : document.querySelector('#profileForm');
+    if (!target) return;
+    target.scrollIntoView({ behavior:'smooth', block:'center' });
+    if (target.matches('input,textarea,select')) target.focus({ preventScroll:true });
+    const wrapper = target.closest('.field');
+    wrapper?.classList.add('profile-focus');
+    setTimeout(() => wrapper?.classList.remove('profile-focus'), 2200);
+  });
 }
 
 function domainLabel(id) { return DOMAINS.find(domain => domain.id === id)?.label || id || 'その他'; }
@@ -334,9 +382,10 @@ function renderLife() {
 }
 
 function renderHealth() {
-  return `<div class="page-enter"><div class="hero"><div class="hero-grid"><div><span class="badge">HEALTH COMPASS</span><h2>診断ではなく、整理と受診準備を。</h2><p>既往歴・現在・理想・改善方法・まずやること・改善しない場合・専門医への相談事項を一本の流れで管理します。</p><button class="btn secondary" data-action="new-record" data-kind="healthItem">健康項目を追加</button></div><div class="life-score">${state.scores.health}<small>HEALTH</small></div></div></div>
-  ${sectionHead('健康項目','視力・腰痛・血圧などを項目別に管理')}${recordList(state.healthItems,'healthItem')}
-  ${sectionHead('健康AIサポート','医療診断は行いません。緊急性がある症状は医療機関へ。')}${aiComposer('health','現在の健康課題を整理し、改善方法・まずやること・改善しない場合・専門医への相談事項を分けてください。')}</div>`;
+  return `<div class="page-enter"><div class="hero"><div class="hero-grid"><div><span class="badge">HEALTH COMPASS</span><h2>診断ではなく、整理と受診準備を。</h2><p>プロフィールの既往歴を土台にして、症状ごとの現在・経過・受診準備を重複なく管理します。</p><button class="btn secondary" data-action="new-record" data-kind="healthItem">健康項目を追加</button></div><div class="life-score">${state.scores.health}<small>HEALTH</small></div></div></div>
+  ${sectionHead('健康の基本情報','既往歴などはプロフィールを正本として自動参照します。ここで同じ内容を入力し直す必要はありません。')}${profileReferenceHtml('healthItem',{context:'page'})}
+  ${sectionHead('健康項目','視力・腰痛・血圧など、項目ごとの変化・現在・受診準備を管理')}${recordList(state.healthItems,'healthItem')}
+  ${sectionHead('健康AIサポート','医療診断は行いません。緊急性がある症状は医療機関へ。')}${aiComposer('health','プロフィールの既往歴と各健康項目を重複なく参照し、現在の健康課題を整理して、改善方法・まずやること・改善しない場合・専門医への相談事項を分けてください。')}</div>`;
 }
 
 function renderWork() {
@@ -373,7 +422,7 @@ function renderAI() {
 }
 
 function renderProfile() {
-  return `<div class="page-enter"><div class="card" style="margin-bottom:16px"><span class="badge">AI BASE DATA</span><h2>あなたを理解する基礎データ</h2><p>空欄は後から少しずつ入力できます。入力済みの項目だけがAI分析に使われます。</p></div><form id="profileForm" class="card form-grid">${PROFILE_FIELDS.map(([id,label,type])=>`<div class="field ${type==='textarea'?'full':''}"><label for="p-${id}">${label}</label>${type==='textarea'?`<textarea id="p-${id}" name="${id}">${esc(state.profile[id])}</textarea>`:`<input id="p-${id}" name="${id}" type="${type}" value="${esc(state.profile[id])}">`}</div>`).join('')}<div class="field full"><div class="btn-row"><button class="btn" type="submit">プロフィールを保存</button><span class="badge">項目単位で安全に同期</span></div></div></form></div>`;
+  return `<div class="page-enter"><div class="card profile-master-card" style="margin-bottom:16px"><span class="badge">AI BASE DATA</span><h2>プロフィールは「基本情報の正本」です</h2><p>既往歴・仕事歴・強み・価値観・現在の制約など、何度も使う情報はここに一度だけ登録します。健康・目標・商品などの画面は、このプロフィールを自動参照するため、同じ内容を何度も入力する必要はありません。</p></div><form id="profileForm" class="card form-grid">${PROFILE_FIELDS.map(([id,label,type])=>`<div class="field ${type==='textarea'?'full':''}"><label for="p-${id}">${label}</label>${type==='textarea'?`<textarea id="p-${id}" name="${id}">${esc(state.profile[id])}</textarea>`:`<input id="p-${id}" name="${id}" type="${type}" value="${esc(state.profile[id])}">`}</div>`).join('')}<div class="field full"><div class="btn-row"><button class="btn" type="submit">プロフィールを保存</button><span class="badge">各画面から自動参照・項目単位で同期</span></div></div></form></div>`;
 }
 
 function renderData() {
@@ -578,7 +627,7 @@ function openRecordDialog(kind, id = '') {
   const urlLabel = kind === 'wish' ? '関連URL（商品・場所・体験のページ）' : '関連URL（参考ページ・地図・予約ページなど）';
   const existingLinks = normalizeReferenceLinks(existing?.details || {});
   const editorLinks = existingLinks.length ? existingLinks : [{}];
-  dialog.innerHTML = `<form id="recordForm"><div class="modal-head"><div><span class="badge">${existing?'編集':'新規'}</span><h2>${esc(KIND_LABELS[kind])}</h2></div><button class="icon-btn" type="button" data-close>×</button></div><div class="modal-body form-grid"><input type="hidden" name="kind" value="${kind}"><div class="field"><label>日付</label><input name="date" type="date" value="${esc(existing?.date || localDateKey())}" required></div><div class="field"><label>関連する分野</label><select name="domain">${DOMAINS.map(domain=>`<option value="${domain.id}" ${(existing?.domain || defaultDomain(kind))===domain.id?'selected':''}>${domain.label}</option>`).join('')}</select></div><div class="field full"><label>タイトル</label><input name="title" value="${esc(existing?.title || '')}" required placeholder="${titlePlaceholder}"></div><div class="field full"><label>概要・自由メモ</label><textarea name="body" placeholder="${bodyPlaceholder}">${esc(existing?.body || '')}</textarea></div>${detailFieldHtml(kind,existing?.details)}<div class="field full reference-links-field"><label>${urlLabel}（最大${MAX_REFERENCE_LINKS}件）</label><div id="referenceLinkRows" class="reference-link-editor">${editorLinks.map(referenceLinkEditorRow).join('')}</div><button class="btn small secondary add-reference" type="button" data-add-reference>＋ リンクを追加</button><span class="hint">公式サイト・SNS・YouTube・地図・予約／購入ページなど。名前は自由、https://は省略できます。</span></div><div class="field full"><label>タグ</label><input name="tags" value="${esc((existing?.tags||[]).join('、'))}" placeholder="健康、挑戦、家族 など"></div><div class="field full"><label>画像・添付（任意・8MB以下）</label><input name="attachment" type="file"><span class="hint">添付はGoogle Driveへ保存します。同期設定が必要です。</span></div><p class="mobile-sheet-note field full">下へスクロールすると保存ボタンがあります。</p></div><div class="modal-actions"><button class="btn ghost" type="button" data-close>キャンセル</button><button class="btn" type="submit">${existing?'更新する':'保存する'}</button></div></form>`;
+  dialog.innerHTML = `<form id="recordForm"><div class="modal-head"><div><span class="badge">${existing?'編集':'新規'}</span><h2>${esc(KIND_LABELS[kind])}</h2></div><button class="icon-btn" type="button" data-close>×</button></div><div class="modal-body form-grid"><input type="hidden" name="kind" value="${kind}"><div class="field"><label>日付</label><input name="date" type="date" value="${esc(existing?.date || localDateKey())}" required></div><div class="field"><label>関連する分野</label><select name="domain">${DOMAINS.map(domain=>`<option value="${domain.id}" ${(existing?.domain || defaultDomain(kind))===domain.id?'selected':''}>${domain.label}</option>`).join('')}</select></div><div class="field full"><label>タイトル</label><input name="title" value="${esc(existing?.title || '')}" required placeholder="${titlePlaceholder}"></div><div class="field full"><label>概要・自由メモ</label><textarea name="body" placeholder="${bodyPlaceholder}">${esc(existing?.body || '')}</textarea></div>${profileReferenceHtml(kind,{context:'editor'})}${detailFieldHtml(kind,existing?.details)}<div class="field full reference-links-field"><label>${urlLabel}（最大${MAX_REFERENCE_LINKS}件）</label><div id="referenceLinkRows" class="reference-link-editor">${editorLinks.map(referenceLinkEditorRow).join('')}</div><button class="btn small secondary add-reference" type="button" data-add-reference>＋ リンクを追加</button><span class="hint">公式サイト・SNS・YouTube・地図・予約／購入ページなど。名前は自由、https://は省略できます。</span></div><div class="field full"><label>タグ</label><input name="tags" value="${esc((existing?.tags||[]).join('、'))}" placeholder="健康、挑戦、家族 など"></div><div class="field full"><label>画像・添付（任意・8MB以下）</label><input name="attachment" type="file"><span class="hint">添付はGoogle Driveへ保存します。同期設定が必要です。</span></div><p class="mobile-sheet-note field full">下へスクロールすると保存ボタンがあります。</p></div><div class="modal-actions"><button class="btn ghost" type="button" data-close>キャンセル</button><button class="btn" type="submit">${existing?'更新する':'保存する'}</button></div></form>`;
   dialog.showModal();
   dialog.querySelectorAll('[data-close]').forEach(button => button.onclick=()=>dialog.close());
   const linkRows = dialog.querySelector('#referenceLinkRows');
@@ -684,7 +733,7 @@ function showRecord(kind,id) {
   const attachments = (row.details?.attachments || []).map(file=>`<a class="attachment-link" href="${esc(file.url)}" target="_blank" rel="noopener noreferrer">${esc(file.name)}</a>`).join('');
   const dialog = $('#detailDialog');
   const linkDetails = links.length ? `<div class="detail-row"><small>関連URL（${links.length}件）</small><div class="reference-links detail-links">${links.map(link => `<div><a class="reference-link" href="${esc(link.url)}" target="_blank" rel="noopener noreferrer">↗ ${esc(link.label)}</a><p class="url-text">${esc(link.url)}</p></div>`).join('')}</div></div>` : '';
-  dialog.innerHTML = `<div class="modal-head"><div><span class="badge">${esc(KIND_LABELS[kind]||kind)}</span><h2>${esc(row.title)}</h2></div><button class="icon-btn" data-close>×</button></div><div class="modal-body"><div class="detail-grid"><div class="detail-row"><small>日付・分野</small><p>${displayDate(row.date)} ／ ${esc(domainLabel(row.domain))}</p></div>${row.body?`<div class="detail-row"><small>概要・メモ</small><p>${esc(row.body)}</p></div>`:''}${linkDetails}${detailRows}${attachments?`<div class="detail-row"><small>添付</small>${attachments}</div>`:''}</div></div><div class="modal-actions"><button class="btn ghost" data-close>閉じる</button><button class="btn" data-action="edit-from-detail" data-kind="${esc(kind)}" data-id="${esc(id)}">編集する</button></div>`;
+  dialog.innerHTML = `<div class="modal-head"><div><span class="badge">${esc(KIND_LABELS[kind]||kind)}</span><h2>${esc(row.title)}</h2></div><button class="icon-btn" data-close>×</button></div><div class="modal-body"><div class="detail-grid"><div class="detail-row"><small>日付・分野</small><p>${displayDate(row.date)} ／ ${esc(domainLabel(row.domain))}</p></div>${row.body?`<div class="detail-row"><small>概要・メモ</small><p>${esc(row.body)}</p></div>`:''}${profileReferenceHtml(kind,{context:'detail'})}${linkDetails}${detailRows}${attachments?`<div class="detail-row"><small>添付</small>${attachments}</div>`:''}</div></div><div class="modal-actions"><button class="btn ghost" data-close>閉じる</button><button class="btn" data-action="edit-from-detail" data-kind="${esc(kind)}" data-id="${esc(id)}">編集する</button></div>`;
   dialog.showModal();
   dialog.querySelectorAll('[data-close]').forEach(button=>button.onclick=()=>dialog.close());
   dialog.querySelector('[data-action="edit-from-detail"]').onclick=()=>{dialog.close();openRecordDialog(kind,id)};
@@ -759,6 +808,7 @@ function exportGptArtifact(type) {
 async function handleAction(action, element) {
   try {
     if (action === 'new-record') return openRecordDialog(element.dataset.kind);
+    if (action === 'edit-profile-context') return goToProfileField(element.dataset.profileFocus || '');
     if (action === 'edit-record') return openRecordDialog(element.dataset.kind,element.dataset.id);
     if (action === 'view-record') return showRecord(element.dataset.kind,element.dataset.id);
     if (action === 'save-scores') {
@@ -908,11 +958,11 @@ async function registerServiceWorker() {
   if (!('serviceWorker' in navigator)) return;
   const hadController = Boolean(navigator.serviceWorker.controller);
   try {
-    const registration = await navigator.serviceWorker.register('./sw.js?v=2.6.1', { updateViaCache:'none' });
+    const registration = await navigator.serviceWorker.register('./sw.js?v=2.7.0', { updateViaCache:'none' });
     await registration.update();
     if (hadController) {
       navigator.serviceWorker.addEventListener('controllerchange',()=>{
-        const refreshKey='life-compass-sw-refresh-v2.6.1';
+        const refreshKey='life-compass-sw-refresh-v2.7.0';
         if(sessionStorage.getItem(refreshKey))return;
         sessionStorage.setItem(refreshKey,'1');
         location.reload();
