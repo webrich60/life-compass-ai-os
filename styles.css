@@ -114,7 +114,7 @@ button:disabled{cursor:wait;opacity:.58}
 #nav .nav-link span:first-child{width:auto;font-size:20px}
 #nav .nav-link:hover{background:#f5f8fd;border-color:#d7e1ef}
 #nav .nav-link.active{background:#f4f8ff;color:#0d61c9;border-color:#a7c9f4;border-bottom-color:#f4f8ff;box-shadow:inset 0 -4px 0 #1769d8}
-#nav .nav-link:nth-child(3){color:#b52861}#nav .nav-link:nth-child(4){color:#a86506}#nav .nav-link:nth-child(5){color:#087d72}#nav .nav-link:nth-child(6){color:#7041be}#nav .nav-link:nth-child(7){color:#3e4d61}#nav .nav-link:nth-child(8){color:#1c7b48}#nav .nav-link:nth-child(9){color:#0a7f85}#nav .nav-link:nth-child(10){color:#6847c7}
+
 .sidebar-bottom{grid-column:2;grid-row:1;display:flex;align-items:center;gap:8px;margin:0;padding:0 0 12px;border:0;background:transparent}
 .sidebar-bottom .nav-link{width:auto;min-height:42px;margin:0;padding:8px 13px;border:1px solid #c9d5e4;background:#f8fafc;border-radius:13px;color:#16243a;font-weight:800}
 .sidebar-bottom .nav-link:first-child{background:#13223b;border-color:#13223b;color:#fff}.sidebar-bottom .nav-link i{display:block}
@@ -203,3 +203,47 @@ button:disabled{cursor:wait;opacity:.58}
 /* v2.7.0: profile as the single source of truth */
 .profile-reference{grid-column:1/-1;border:1.5px solid #8bb6e8;background:linear-gradient(145deg,#f8fbff,#eaf4ff);border-radius:19px;padding:17px 18px;margin:2px 0 4px}.profile-reference-page{margin:0 0 8px}.profile-reference-head{display:flex;gap:16px;justify-content:space-between;align-items:flex-start}.profile-reference-head>div{min-width:0}.profile-reference-head h3{margin:8px 0 5px;font-size:17px;color:var(--ink)}.profile-reference-head p{margin:0;color:var(--ink-2);font-size:14px;font-weight:600;line-height:1.65}.profile-source{color:#1558b0;background:#dbeaff;border-color:#9ec4ef}.profile-reference-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:10px;margin-top:14px}.profile-reference-item{border:1px solid #c8ddf5;background:rgba(255,255,255,.88);border-radius:14px;padding:12px 13px;min-width:0}.profile-reference-item small{display:block;color:#47627f;font-weight:800;font-size:12px;margin-bottom:5px}.profile-reference-item p{margin:0;color:var(--ink);font-size:14px;font-weight:650;line-height:1.65;white-space:pre-wrap;overflow-wrap:anywhere;display:-webkit-box;-webkit-line-clamp:5;-webkit-box-orient:vertical;overflow:hidden}.profile-reference-empty{grid-column:1/-1;border:1px dashed #9ebddd;background:#fff;border-radius:14px;padding:13px;color:var(--ink-2);font-size:14px;font-weight:650}.profile-reference-note{margin:12px 0 0;color:#49627d;font-size:12px;font-weight:700;line-height:1.6}.profile-master-card{border:1.5px solid #89b7ea;background:linear-gradient(145deg,#fff,#edf5ff)}.profile-focus{outline:4px solid rgba(21,88,176,.18);outline-offset:7px;border-radius:10px;transition:outline-color .25s}.detail-grid>.profile-reference{margin:4px 0 8px}
 @media(max-width:700px){.profile-reference{padding:15px}.profile-reference-head{display:grid}.profile-reference-head .btn{width:100%}.profile-reference-grid{grid-template-columns:1fr}.profile-reference-item p{-webkit-line-clamp:7}}
+
+/* v2.7.1: duplicate detection / 重複候補アラート */
+.duplicate-summary{margin:10px 0 14px;padding:13px 14px;border:1.5px solid #e3aa3e;border-radius:15px;background:#fff9e9;color:#563a05}.duplicate-summary-head{display:flex;gap:10px;align-items:flex-start}.duplicate-summary-head>span{font-size:20px;line-height:1}.duplicate-summary-head b{display:block;font-size:14px;color:#6d4300}.duplicate-summary-head small{display:block;margin-top:3px;color:#745b2e;font-size:12px;font-weight:700;line-height:1.5}.duplicate-pairs{display:grid;gap:7px;margin-top:10px}.duplicate-pair{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:9px 10px;border:1px solid #edcf8e;border-radius:11px;background:#fff}.duplicate-pair>div{min-width:0;display:flex;align-items:center;gap:7px;flex-wrap:wrap}.duplicate-pair b{font-size:13px;color:#21344a}.duplicate-pair span{color:#a66c00;font-weight:900}.duplicate-pair small{width:100%;color:#725d36;font-size:11px;font-weight:700}.duplicate-editor-slot{padding:0!important}.duplicate-editor-warning{padding:14px 15px;border:2px solid #dc9c22;border-radius:16px;background:#fff8e3;box-shadow:0 8px 20px rgba(130,86,0,.08)}.duplicate-editor-title{display:flex;align-items:flex-start;gap:10px}.duplicate-editor-title>span{font-size:23px}.duplicate-editor-title b{display:block;color:#653d00;font-size:15px}.duplicate-editor-title small{display:block;margin-top:3px;color:#795e2d;font-size:12px;font-weight:700}.duplicate-editor-match{display:flex;justify-content:space-between;gap:12px;align-items:center;margin-top:9px;padding:9px 10px;border:1px solid #ebc66f;border-radius:11px;background:#fff}.duplicate-editor-match>div{min-width:0}.duplicate-editor-match b{display:block;color:#1e334d;font-size:13px;overflow-wrap:anywhere}.duplicate-editor-match small{display:block;margin-top:2px;color:#6f5d3a;font-size:11px;font-weight:700}.duplicate-editor-match>span{flex:0 0 auto;padding:4px 7px;border-radius:999px;background:#f3c35e;color:#513100;font-size:11px;font-weight:900}.duplicate-editor-warning>p{margin:10px 0 0;color:#634f28;font-size:12px;font-weight:700}
+@media(max-width:700px){.duplicate-summary{padding:12px}.duplicate-pair{align-items:flex-start}.duplicate-pair .btn{flex:0 0 auto}.duplicate-editor-warning{padding:13px}.duplicate-editor-title b{font-size:14px}}
+
+/* v2.8.0: 事業と収入を分離 */
+.quick-income{border-color:#54aa78;background:linear-gradient(145deg,#f6fff9,#e2f7e9)}
+.dashboard-income{color:#1c7b48;border-color:#79c89b;background:linear-gradient(145deg,#f7fff9,#e2f8ea)}
+.income-hero{background:linear-gradient(135deg,#0f6a48 0%,#1d8a61 55%,#4aa878 100%)}
+.income-metrics{margin-top:16px}
+.income-record{border-color:#9ad0af;background:linear-gradient(145deg,#ffffff,#f5fff8)}
+.income-card-amount{display:block;margin:8px 0 5px;color:#0f6f49;font-size:26px;font-weight:900;letter-spacing:-.4px}
+.income-type-tag{background:#e8f7ee;color:#0d6d47;border-color:#a9d8bb}
+.locked-field{min-height:48px;display:flex;align-items:center;padding:12px 14px;border:1px solid #cfd9e6;border-radius:13px;background:#f2f7fb;color:#183c68;font-weight:800}
+
+@media(min-width:981px){
+  #nav .nav-link:nth-child(3){color:#b52861}
+  #nav .nav-link:nth-child(4){color:#a86506}
+  #nav .nav-link:nth-child(5){color:#1c7b48}
+  #nav .nav-link:nth-child(6){color:#087d72}
+  #nav .nav-link:nth-child(7){color:#7041be}
+  #nav .nav-link:nth-child(8){color:#3e4d61}
+  #nav .nav-link:nth-child(9){color:#1c7b48}
+  #nav .nav-link:nth-child(10){color:#0a7f85}
+  #nav .nav-link:nth-child(11){color:#6847c7}
+}
+@media(max-width:700px){
+  .income-card-amount{font-size:24px}
+}
+
+
+/* v2.8.1: 習慣カテゴリ */
+.task-badges{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:6px;align-items:center}
+.badge.habit-category{border:1px solid transparent}
+.badge.habit-meal{background:#fff0dc;color:#854300;border-color:#e9bb75}
+.badge.habit-exercise{background:#e3f5ea;color:#12613a;border-color:#80c49a}
+.badge.habit-sleep{background:#eceaff;color:#4d4498;border-color:#aaa4dd}
+.badge.habit-health{background:#ffe8ed;color:#9b2946;border-color:#e8a1b2}
+.badge.habit-learning{background:#e7f0ff;color:#2059a6;border-color:#94b8e8}
+.badge.habit-work{background:#e7edf7;color:#314d78;border-color:#9fb1cc}
+.badge.habit-life{background:#e4f5f2;color:#17665e;border-color:#8bc6be}
+.badge.habit-other{background:#f0f2f5;color:#4c596a;border-color:#bfc7d1}
+.badge.habit-uncategorized{background:#fff4cc;color:#765800;border-color:#d8c36b}
+@media(max-width:700px){.task{flex-wrap:wrap}.task-badges{width:100%;justify-content:flex-start;padding-left:35px}}
