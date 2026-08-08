@@ -281,3 +281,37 @@ button:disabled{cursor:wait;opacity:.58}
 .medical-wish-grid .record p{font-size:13px;line-height:1.55}
 @media(max-width:900px){.medical-balance-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:700px){.medical-balance-head{display:block}.medical-balance-head .btn{margin-top:12px}.medical-balance-grid{grid-template-columns:1fr 1fr}.medical-balance-grid>div{padding:12px}.medical-wish-grid{display:grid;grid-template-columns:1fr}.medical-wish-grid .wish-group{display:block}}
+
+
+/* v3.0.0 NotebookLM structured-sheet integration */
+.notebooklm-card{border:2px solid #b9d6ff;background:linear-gradient(145deg,#f8fbff,#eef6ff)}
+.notebooklm-head{display:flex;align-items:flex-start;justify-content:space-between;gap:20px}
+.notebooklm-head h2{margin:10px 0 8px}.notebooklm-head p{margin:0;max-width:780px}
+.notebooklm-icon{width:58px;height:58px;border-radius:18px;display:grid;place-items:center;background:#0d63d8;color:white;font-weight:900;font-size:28px;box-shadow:0 10px 25px rgba(13,99,216,.2);flex:0 0 auto}
+.notebooklm-steps{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin:18px 0}
+.notebooklm-steps div{display:flex;align-items:center;gap:10px;border:1px solid #cfe0f8;background:#fff;border-radius:14px;padding:12px 14px;font-weight:800;color:#17365f}
+.notebooklm-steps b{width:28px;height:28px;border-radius:50%;display:grid;place-items:center;background:#e5f0ff;color:#0d63d8}
+@media(max-width:720px){.notebooklm-steps{grid-template-columns:1fr}.notebooklm-icon{width:50px;height:50px;border-radius:15px}.notebooklm-card .btn-row .btn{width:100%}}
+
+/* v3.1.0: お金の全体像（収入・支出・固定費・負債） */
+.finance-metrics{margin-top:16px}
+.finance-tabs{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin:24px 0 4px;padding:6px;border:1px solid var(--line);border-radius:19px;background:rgba(233,240,249,.78)}
+.finance-tabs button{min-width:0;border:1px solid transparent;border-radius:15px;background:transparent;padding:12px 10px;color:var(--ink-2);font-weight:750;display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:8px;text-align:left}
+.finance-tabs button span{width:30px;height:30px;border-radius:10px;display:grid;place-items:center;background:#fff;color:var(--accent);font-weight:900}
+.finance-tabs button b{font-size:14px;white-space:nowrap}.finance-tabs button small{font-size:11px;color:var(--muted);font-weight:800}
+.finance-tabs button.active{background:#fff;border-color:#9cbbe2;color:#103f78;box-shadow:var(--shadow-sm)}
+.finance-tab-content{min-height:180px}.finance-panel .section-head{margin-top:22px}
+.finance-balance-card{margin-top:16px;display:flex;justify-content:space-between;align-items:center;gap:22px;border:1.5px solid #8fb2df;background:linear-gradient(145deg,#f9fcff,#eaf3ff)}
+.finance-balance-card h3{font-size:31px;margin:8px 0 4px;letter-spacing:-.8px}.finance-balance-card p{margin:0;color:var(--ink-2);font-size:13px;line-height:1.6;font-weight:650}
+.finance-balance-breakdown{display:grid;gap:7px;min-width:210px}.finance-balance-breakdown span{display:flex;justify-content:space-between;gap:14px;padding:7px 10px;border-radius:10px;background:rgba(255,255,255,.78);color:var(--ink-2);font-size:12px;font-weight:700}.finance-balance-breakdown b{color:var(--ink);font-size:13px}
+.finance-note{margin:12px 0 0;padding:12px 14px;border:1px solid #e2c788;border-radius:14px;background:#fff8e7;display:flex;gap:10px;align-items:flex-start;color:#6b4b0d;font-size:12px;line-height:1.6}.finance-note b{flex:0 0 auto;color:#795000}.finance-note span{font-weight:650}
+.expense-type-tag{background:#fff0e7;color:#8a4824;border-color:#e7af91}.fixed-type-tag{background:#e9f0ff;color:#164f9e;border-color:#8cafdf}.debt-type-tag{background:#ffe8ed;color:#9b2946;border-color:#e8a1b2}
+.income-card-amount small{font-size:12px;color:#56705f;font-weight:800;letter-spacing:0}
+@media(max-width:1000px){.finance-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:700px){
+  .finance-tabs{grid-template-columns:repeat(2,minmax(0,1fr));position:sticky;top:78px;z-index:9;background:rgba(243,247,252,.96);backdrop-filter:blur(12px)}
+  .finance-tabs button{padding:10px 8px;grid-template-columns:auto 1fr}.finance-tabs button small{grid-column:2}
+  .finance-balance-card{display:grid}.finance-balance-breakdown{min-width:0}.finance-note{display:grid}
+  .finance-metrics{grid-template-columns:1fr 1fr}.finance-metrics .metric-card{min-height:90px;padding:15px}.finance-metrics .metric-card b{font-size:19px}
+}
+@media(max-width:430px){.finance-metrics{grid-template-columns:1fr}.finance-tabs{grid-template-columns:1fr 1fr}.finance-tabs button b{font-size:13px}}

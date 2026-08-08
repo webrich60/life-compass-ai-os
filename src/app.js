@@ -5,7 +5,7 @@ import {
 } from './model.js';
 import {
   loadCache, saveCache, exportBackup, synchronize,
-  testConnection, uploadAttachment, clearLocalCache
+  testConnection, uploadAttachment, clearLocalCache, refreshNotebookLMSheets
 } from './storage.js';
 import { inspectLegacyJson, applyMigration, inspectLegacyJsonBatch, applyMigrationBatch } from './migration.js';
 import { askAI, buildNotebookMarkdown } from './ai.js';
@@ -17,7 +17,7 @@ import { findDuplicateCandidates, findDuplicatePairs } from './duplicates.js';
 
 const PAGES = [
   ['home','⌂','ホーム'], ['life','◎','人生設計'], ['health','♡','健康'],
-  ['work','▣','事業'], ['income','¥','収入'], ['timeline','⌁','タイムライン'], ['reviews','◷','定期レビュー'],
+  ['work','▣','事業'], ['income','¥','お金'], ['timeline','⌁','タイムライン'], ['reviews','◷','定期レビュー'],
   ['ai','✦','AI伴走'], ['integrations','⌬','AI連携'], ['data','⇄','連携・移行'], ['profile','♙','プロフィール']
 ];
 const EXTRA_PAGES = ['settings','search'];
@@ -29,6 +29,7 @@ const COLLECTIONS = {
 const KIND_LABELS = {
   record:'日々の記録', goal:'目標', habit:'習慣', healthItem:'健康項目', timeline:'人生の出来事',
   wish:'夢・楽しみ', comparison:'人生比較', product:'商品・事業の種', incomeRecord:'収入記録',
+  expenseRecord:'支出記録', fixedCostRecord:'固定費', debtRecord:'負債・借入',
   review:'定期レビュー', simulation:'未来シミュレーション'
 };
 const DETAIL_FIELDS = {
@@ -65,6 +66,24 @@ const DETAIL_FIELDS = {
     ['incomeFrequency','頻度','select','単発|毎月|毎年|不定期'],
     ['incomeStatus','状態','select','確定|見込|未入金']
   ],
+  expenseRecord:[
+    ['expenseType','支出の種類','select','生活費|医療|住居|交通|娯楽|家族|税・社会保険|事業|臨時支出|その他'],
+    ['amount','金額（円）','number'],['expensePeriod','対象年月','month'],
+    ['payee','支払先・用途','text'],['expenseStatus','状態','select','確定|予定']
+  ],
+  fixedCostRecord:[
+    ['fixedCostType','固定費の種類','select','住居|光熱|通信|保険|医療|車|サブスク|事業固定費|その他'],
+    ['amount','金額（円）','number'],['fixedCostFrequency','支払頻度','select','毎月|2か月ごと|半年|毎年'],
+    ['payee','支払先','text'],['fixedCostStart','開始年月','month'],['fixedCostEnd','終了予定（任意）','month'],
+    ['fixedCostStatus','状態','select','継続中|見直し候補|終了']
+  ],
+  debtRecord:[
+    ['debtType','負債・借入の種類','select','借入金|住宅・自動車ローン|カード分割・リボ|家族・知人|事業借入|その他'],
+    ['lenderName','借入先','text'],['originalAmount','借入総額（円）','number'],['remainingBalance','現在残高（円）','number'],
+    ['monthlyPayment','毎月返済額（円）','number'],['interestRate','金利・年率（%・任意）','number'],
+    ['borrowedDate','借入日','date'],['repaymentEndDate','返済予定日（任意）','date'],
+    ['debtPurpose','借りた理由','textarea'],['debtStatus','状態','select','返済中|返済猶予|完済|その他']
+  ],
   review:[['period','期間','select','weekly|monthly|yearly'],['wins','できたこと','textarea'],['issues','課題','textarea'],['nextActions','次にやること','textarea']],
   simulation:[['condition','変える条件','textarea'],['horizon','期間','select','1か月|3か月|半年|1年'],['assumptions','前提条件','textarea']]
 };
@@ -87,6 +106,7 @@ const PROFILE_REFERENCE_MAP = {
   comparison: ['values','constraints'],
   product: ['strengths','workHistory','values','constraints'],
   incomeRecord: ['workHistory','constraints'],
+  debtRecord: ['constraints'],
   simulation: ['values','constraints']
 };
 const PROFILE_REFERENCE_COPY = {
@@ -96,6 +116,7 @@ const PROFILE_REFERENCE_COPY = {
   comparison: '価値観と現在の制約はプロフィールから参照します。ここには過去・現在・新しい理想の差分だけを記録します。',
   product: '強み・実績・仕事歴・価値観・制約はプロフィールから参照します。商品カードには顧客・課題・提供内容・検証など商品固有の情報だけを記録します。',
   incomeRecord: '仕事歴や現在の制約はプロフィールから参照します。収入カードには、収入元・金額・対象年月・確定／見込など、その収入固有の情報だけを記録します。',
+  debtRecord: '現在の制約はプロフィールから参照できます。借入カードには、借入先・残高・返済額・借りた理由など、この借入固有の情報だけを記録します。',
   simulation: '価値観と現在の制約はプロフィールから参照します。シミュレーションには今回変える条件と前提だけを記録します。'
 };
 
@@ -119,6 +140,7 @@ let deferredInstallPrompt = null;
 let searchKind = 'all';
 let lifeView = 'cards';
 let wishTab = 'wanted';
+let financeTab = 'income';
 const $ = selector => document.querySelector(selector);
 const esc = value => String(value ?? '').replace(/[&<>'"]/g, char => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[char]));
 
@@ -183,6 +205,33 @@ async function performSync({ quiet = false } = {}) {
   }
 }
 
+
+async function refreshNotebookLM(button) {
+  if (!state.settings.gasUrl || !state.settings.syncToken) {
+    return toast('先に設定画面でGAS URLと同期トークンを登録してください','error');
+  }
+  const original = button?.textContent || 'NotebookLM用シートを更新';
+  if (button) { button.disabled = true; button.textContent = '同期・分析タブ作成中…'; }
+  updateChrome('syncing');
+  try {
+    // NotebookLMにはクラウド正本を渡すため、ボタン押下時に必ず最新状態まで同期する。
+    state = await synchronize(state);
+    const result = await refreshNotebookLMSheets(state);
+    const count = Number(result.sheetCount || 0);
+    toast(`NotebookLM用シートを${count || ''}タブ更新しました`);
+    updateChrome();
+    render();
+    if (result.spreadsheetUrl && confirm('NotebookLM用タブを更新しました。Googleスプレッドシートを開きますか？')) {
+      window.open(result.spreadsheetUrl, '_blank', 'noopener,noreferrer');
+    }
+  } catch (error) {
+    toast(error.message || String(error), 'error');
+    updateChrome();
+  } finally {
+    if (button) { button.disabled = false; button.textContent = original; }
+  }
+}
+
 function updateChrome(status = '') {
   const found = PAGES.find(([id]) => id === page);
   const names = { settings:'設定', search:'データ検索' };
@@ -242,7 +291,8 @@ function displayDate(value) {
   const date = new Date(`${String(value).slice(0,10)}T00:00:00`);
   return Number.isNaN(date.getTime()) ? esc(value) : new Intl.DateTimeFormat('ja-JP',{year:'numeric',month:'short',day:'numeric'}).format(date);
 }
-function collectionFor(kind) { return kind === 'incomeRecord' ? 'records' : COLLECTIONS[kind]; }
+const FINANCE_RECORD_KINDS = new Set(['incomeRecord','expenseRecord','fixedCostRecord','debtRecord']);
+function collectionFor(kind) { return FINANCE_RECORD_KINDS.has(kind) ? 'records' : COLLECTIONS[kind]; }
 function allRows({ deleted = false } = {}) {
   return Object.entries(COLLECTIONS).flatMap(([kind,key]) => (state[key] || []).map(row => ({...row,kind:row.kind || kind})))
     .filter(row => deleted ? Boolean(row.deletedAt) : !row.deletedAt);
@@ -365,7 +415,7 @@ function renderHome() {
     {page:'life',icon:'◎',label:'人生設計',count:lifeCount,theme:'life'},
     {page:'health',icon:'♡',label:'健康',count:activeRows(state.healthItems).length,theme:'health'},
     {page:'work',icon:'▣',label:'事業',count:activeRows(state.products).length,theme:'work'},
-    {page:'income',icon:'¥',label:'収入',count:incomeRows().length,theme:'income'},
+    {page:'income',icon:'¥',label:'お金',count:financeRows().length,theme:'income'},
     {page:'timeline',icon:'⌁',label:'タイムライン',count:activeRows(state.timeline).length,theme:'timeline'},
     {page:'reviews',icon:'◷',label:'レビュー',count:activeRows(state.reviews).length,theme:'reviews'},
     {page:'ai',icon:'✦',label:'AI伴走',count:state.aiHistory.length,theme:'ai'},
@@ -482,42 +532,85 @@ function renderHealth() {
   ${sectionHead('健康・医療AIサポート','医療診断は行いません。医療計画・身体負担・メンタル負担・収入への影響を整理します。')}${aiComposer('health','プロフィールの既往歴、現在の健康項目、手術・治療・検査の医療計画、医療分野の欲しいもの・病院候補・やりたいこと、収入記録を重複なく参照してください。診断はせず、事実と未確定情報を分け、身体への負担、メンタルへの負担、収入・仕事への影響、医師に確認すること、今準備することを整理してください。')}</div>`;
 }
 
-function incomeRows() {
-  return activeRows(state.records).filter(row => row.kind === 'incomeRecord' || row.domain === 'income');
+function financeRows(kind = '') {
+  const rows = activeRows(state.records).filter(row => FINANCE_RECORD_KINDS.has(row.kind) || row.domain === 'income');
+  if (!kind) return rows;
+  if (kind === 'incomeRecord') return rows.filter(row => row.kind === 'incomeRecord' || (!FINANCE_RECORD_KINDS.has(row.kind) && row.domain === 'income'));
+  return rows.filter(row => row.kind === kind);
 }
 
-function incomeAmount(row) {
-  const raw = String(row?.details?.amount ?? '').replace(/[，,￥¥\s]/g,'');
-  const value = Number(raw);
-  return Number.isFinite(value) ? Math.max(0, value) : 0;
+function incomeRows() { return financeRows('incomeRecord'); }
+function expenseRows() { return financeRows('expenseRecord'); }
+function fixedCostRows() { return financeRows('fixedCostRecord'); }
+function debtRows() { return financeRows('debtRecord'); }
+
+function moneyNumber(value) {
+  const raw = String(value ?? '').replace(/[，,￥¥\s]/g,'');
+  const number = Number(raw);
+  return Number.isFinite(number) ? Math.max(0, number) : 0;
 }
 
-function incomeYen(value) {
-  const amount = Number(value || 0);
-  return `¥${Math.round(amount).toLocaleString('ja-JP')}`;
+function incomeAmount(row) { return moneyNumber(row?.details?.amount); }
+function incomeYen(value) { const amount=Math.round(Number(value||0)); return amount < 0 ? `-¥${Math.abs(amount).toLocaleString('ja-JP')}` : `¥${amount.toLocaleString('ja-JP')}`; }
+
+function monthlyFixedCost(row) {
+  const amount = moneyNumber(row?.details?.amount);
+  const factor = {'毎月':1,'2か月ごと':0.5,'半年':1/6,'毎年':1/12}[row?.details?.fixedCostFrequency || '毎月'] ?? 1;
+  return row?.details?.fixedCostStatus === '終了' ? 0 : amount * factor;
+}
+
+function financeTabsHtml(counts) {
+  const tabs = [
+    ['income','収入','¥',counts.income],['expense','支出','−',counts.expense],
+    ['fixed','固定費','⌂',counts.fixed],['debt','負債・借入','↘',counts.debt]
+  ];
+  return `<div class="finance-tabs" role="tablist" aria-label="お金の記録種類">${tabs.map(([id,label,icon,count])=>`<button class="${financeTab===id?'active':''}" data-finance-tab="${id}" role="tab" aria-selected="${financeTab===id}"><span>${icon}</span><b>${label}</b><small>${count}件</small></button>`).join('')}</div>`;
+}
+
+function financePanel(kind, title, copy, buttonLabel, rows) {
+  const sorted = [...rows].sort((a,b)=>new Date(b.date||b.updatedAt||0)-new Date(a.date||a.updatedAt||0));
+  return `<section class="finance-panel">${sectionHead(title,copy,`<button class="btn" data-action="new-record" data-kind="${kind}">＋ ${buttonLabel}</button>`)}${recordList(sorted,kind)}</section>`;
 }
 
 function renderWork() {
   return `<div class="page-enter"><div class="grid grid-2"><div class="card metric-card"><span class="metric-icon">▣</span><div><small>仕事スコア</small><b>${state.scores.work}</b></div></div><div class="card metric-card"><span class="metric-icon">◇</span><div><small>事業アイデア</small><b>${activeRows(state.products).length}</b></div></div></div>
-  ${sectionHead('商品・事業の種','事業・商品開発だけをここで管理します。収入の記録は「収入」画面へ分離しました。','<div class="btn-row"><button class="btn" data-action="new-record" data-kind="product">＋ 事業・商品を追加</button><button class="btn secondary" data-page="income">収入を見る</button></div>')}${recordList(state.products,'product')}
+  ${sectionHead('商品・事業の種','事業・商品開発だけをここで管理します。収入・支出・固定費・負債は「お金」画面へ分離しました。','<div class="btn-row"><button class="btn" data-action="new-record" data-kind="product">＋ 事業・商品を追加</button><button class="btn secondary" data-page="income">お金を見る</button></div>')}${recordList(state.products,'product')}
   ${sectionHead('経営・商品AI','実用性・販売可能性・次の検証まで客観的に分析')}${aiComposer('business','人生経験と現在の商品案を横断し、実用性・販売可能性・次の検証を客観的に分析してください。')}</div>`;
 }
 
 function renderIncome() {
-  const rows = [...incomeRows()].sort((a,b)=>new Date(b.date||b.updatedAt||0)-new Date(a.date||a.updatedAt||0));
+  const incomes = incomeRows();
+  const expenses = expenseRows();
+  const fixed = fixedCostRows();
+  const debts = debtRows();
   const month = localDateKey().slice(0,7);
-  const thisMonth = rows.filter(row => String(row.details?.incomePeriod || row.date || '').slice(0,7) === month);
-  const confirmed = thisMonth.filter(row => !['見込','未入金'].includes(String(row.details?.incomeStatus || '確定'))).reduce((sum,row)=>sum+incomeAmount(row),0);
-  const expected = thisMonth.filter(row => String(row.details?.incomeStatus || '') === '見込').reduce((sum,row)=>sum+incomeAmount(row),0);
+  const thisMonthIncome = incomes.filter(row => String(row.details?.incomePeriod || row.date || '').slice(0,7) === month);
+  const confirmedIncome = thisMonthIncome.filter(row => !['見込','未入金'].includes(String(row.details?.incomeStatus || '確定'))).reduce((sum,row)=>sum+incomeAmount(row),0);
+  const thisMonthExpense = expenses.filter(row => String(row.details?.expensePeriod || row.date || '').slice(0,7) === month && String(row.details?.expenseStatus || '確定') !== '予定').reduce((sum,row)=>sum+moneyNumber(row.details?.amount),0);
+  const monthlyFixed = fixed.reduce((sum,row)=>sum+monthlyFixedCost(row),0);
+  const activeDebts = debts.filter(row => String(row.details?.debtStatus || '返済中') !== '完済');
+  const debtBalance = activeDebts.reduce((sum,row)=>sum+moneyNumber(row.details?.remainingBalance || row.details?.originalAmount),0);
+  const monthlyDebt = activeDebts.reduce((sum,row)=>sum+moneyNumber(row.details?.monthlyPayment),0);
+  const roughMargin = confirmedIncome - thisMonthExpense - monthlyFixed - monthlyDebt;
+  const panels = {
+    income: financePanel('incomeRecord','収入記録','給与・年金・副収入・給付・配当など、入ってくるお金を記録します。','収入を追加',incomes),
+    expense: financePanel('expenseRecord','支出記録','家計簿のように細かく記録せず、医療費・大きな買い物・税金など把握したい支出だけでOKです。','支出を追加',expenses),
+    fixed: financePanel('fixedCostRecord','固定費','毎月・毎年ほぼ決まって出ていく費用を登録します。金額の見直し候補も残せます。','固定費を追加',fixed),
+    debt: financePanel('debtRecord','負債・借入','どこから、いくら借り、残りはいくらで、毎月いくら返しているか。借りた理由も一緒に残します。','負債・借入を追加',debts)
+  };
   return `<div class="page-enter">
-    <div class="hero income-hero"><div class="hero-grid"><div><span class="badge">INCOME COMPASS</span><h2>収入は、事業とは別に記録。</h2><p>給与・年金・副収入・給付や手当・配当・臨時収入などを、入金単位で管理します。事業計画を書く必要はありません。</p><button class="btn" data-action="new-record" data-kind="incomeRecord">＋ 収入を記録</button></div><div class="life-score">${state.scores.income}<small>INCOME</small></div></div></div>
-    <div class="grid grid-3 income-metrics">
-      <div class="card metric-card"><span class="metric-icon">¥</span><div><small>今月の確定収入</small><b>${incomeYen(confirmed)}</b></div></div>
-      <div class="card metric-card"><span class="metric-icon">◷</span><div><small>今月の見込</small><b>${incomeYen(expected)}</b></div></div>
-      <div class="card metric-card"><span class="metric-icon">▤</span><div><small>収入記録</small><b>${rows.length}件</b></div></div>
+    <div class="hero income-hero"><div class="hero-grid"><div><span class="badge">MONEY COMPASS</span><h2>事業とは分けて、お金の全体像だけを把握。</h2><p>収入・支出・固定費・負債を、人生設計に必要な粒度で記録します。家計簿のような1円単位の管理は目的にしません。</p><div class="btn-row"><button class="btn" data-action="new-record" data-kind="incomeRecord">＋ 収入</button><button class="btn secondary" data-action="new-record" data-kind="debtRecord">＋ 負債・借入</button></div></div><div class="life-score">${state.scores.income}<small>MONEY</small></div></div></div>
+    <div class="grid grid-4 finance-metrics">
+      <div class="card metric-card"><span class="metric-icon">¥</span><div><small>今月の確定収入</small><b>${incomeYen(confirmedIncome)}</b></div></div>
+      <div class="card metric-card"><span class="metric-icon">⌂</span><div><small>月あたり固定費</small><b>${incomeYen(monthlyFixed)}</b></div></div>
+      <div class="card metric-card"><span class="metric-icon">↘</span><div><small>毎月の返済額</small><b>${incomeYen(monthlyDebt)}</b></div></div>
+      <div class="card metric-card"><span class="metric-icon">▤</span><div><small>負債の現在残高</small><b>${incomeYen(debtBalance)}</b></div></div>
     </div>
-    ${sectionHead('収入記録','収入名・種類・金額・収入元・対象年月・確定／見込をカードで管理します。','<button class="btn" data-action="new-record" data-kind="incomeRecord">＋ 収入を追加</button>')}${recordList(rows,'incomeRecord')}
-    ${sectionHead('収入AI','事業とは切り離し、収入源の内訳・継続性・偏り・改善余地を整理')}${aiComposer('income','収入記録とプロフィールを参照し、現在の収入源を種類別に整理してください。確定収入と見込を分け、継続性、特定収入源への偏り、現実的な改善余地を分析してください。事業案そのものの評価はここでは行わないでください。')}
+    <section class="card finance-balance-card"><div><span class="badge blue">ざっくり生活余力</span><h3>${incomeYen(roughMargin)}</h3><p>今月の確定収入 − 今月の登録支出 − 月換算固定費 − 毎月返済額。家計簿ではないため参考値です。</p></div><div class="finance-balance-breakdown"><span>今月支出 <b>${incomeYen(thisMonthExpense)}</b></span><span>固定費 <b>${incomeYen(monthlyFixed)}</b></span><span>返済 <b>${incomeYen(monthlyDebt)}</b></span></div></section>
+    <div class="finance-note"><b>二重計上を避けるコツ</b><span>固定費と借入返済は専用欄へ。支出には、固定費・返済以外の大きな支出や把握したい支出を登録してください。</span></div>
+    ${financeTabsHtml({income:incomes.length,expense:expenses.length,fixed:fixed.length,debt:debts.length})}
+    <div class="finance-tab-content">${panels[financeTab] || panels.income}</div>
+    ${sectionHead('お金AI','収入・支出・固定費・負債を人生設計の観点で整理。家計簿の細かな節約診断ではありません。')}${aiComposer('income','収入・支出・固定費・負債（借入）とプロフィール、医療計画を横断してください。収入の安定性、毎月の固定負担、返済負担、医療や生活上の大きな支出予定を整理し、事実と推測を分けて、無理が出そうな点と現実的な改善余地を示してください。家計簿の1円単位の最適化は不要です。')}
   </div>`;
 }
 
@@ -558,8 +651,10 @@ function renderData() {
   const counts = [['記録',state.records],['目標',state.goals],['習慣',state.habits],['夢・楽しみ',state.wishes],['健康',state.healthItems],['タイムライン',state.timeline],['人生比較',state.comparisons],['商品',state.products],['レビュー',state.reviews],['シミュレーション',state.simulations]];
   return `<div class="page-enter"><div class="grid grid-2"><section class="card"><h2>クラウド同期</h2><div class="status-panel"><span class="status-dot ${synced?'ok':'warn'}"></span><div><b>${synced?'同期済み':'初回同期前'}</b><small style="display:block;color:var(--muted)">${synced?new Date(state.meta.lastSyncedAt).toLocaleString('ja-JP'):'設定で接続情報を登録してください'}</small></div></div><p>Google Sheetsを正本として、プロフィールも点数も項目単位で安全に統合します。</p><div class="btn-row"><button class="btn" data-action="sync">今すぐ同期</button><button class="btn ghost" data-action="test-connection">接続テスト</button></div></section>
   <section class="card"><h2>JSONバックアップ</h2><p>全データを手元に保存します。復元や端末移行に使えます。</p><div class="btn-row"><button class="btn secondary" data-action="export-json">JSONを書き出す</button><button class="btn ghost" data-action="import-json">旧JSONを比較・統合</button></div></section></div>
-  ${sectionHead('外部連携','同じ人生データを目的別に再利用')}
-  <div class="quick-actions"><button class="quick" data-page="integrations"><b>LINE・相棒専用GPT</b><small>AI連携センターを開く</small></button><button class="quick" data-action="export-notebook"><b>NotebookLM</b><small>人生データを資料化</small></button><button class="quick" data-action="export-story"><b>Story Studio</b><small>人生資産を書き出す</small></button><button class="quick" data-action="export-product"><b>商品設計</b><small>経験を商品へ送る</small></button><button class="quick" data-action="export-kotka"><b>KOTKA AI経営OS</b><small>事業データを書き出す</small></button></div>
+  ${sectionHead('NotebookLM連携','Google Sheets内にNotebookLM専用の読み取りやすい分析タブを自動生成')}
+  <section class="card notebooklm-card"><div class="notebooklm-head"><div><span class="badge blue">NOTEBOOKLM READY</span><h2>人生データをNotebookLM向けに整理</h2><p>最初にクラウド同期し、その正本からプロフィール・健康／医療・収入／支出／固定費／負債・目標／習慣・夢・事業・タイムライン・レビューを専用タブへ再構成します。同じ情報をもう一度入力する必要はありません。</p></div><div class="notebooklm-icon">N</div></div><div class="notebooklm-steps"><div><b>1</b><span>Life Compassを同期</span></div><div><b>2</b><span>NotebookLM用タブを更新</span></div><div><b>3</b><span>同じGoogleスプレッドシートをNotebookLMのソースに追加</span></div></div><div class="btn-row"><button class="btn" data-action="refresh-notebooklm">NotebookLM用シートを更新</button><button class="btn ghost" data-action="export-notebook">Markdownでも書き出す</button></div><p class="fine-print">更新すると NLM_00_Overview ～ NLM_10_All_Index を再生成します。Life Compassの正本シートは削除・変更しません。健康・医療・収入・支出・負債などセンシティブな情報を含むため、NotebookLM側の共有範囲には注意してください。</p></section>
+  ${sectionHead('その他の外部連携','同じ人生データを目的別に再利用')}
+  <div class="quick-actions"><button class="quick" data-page="integrations"><b>LINE・相棒専用GPT</b><small>AI連携センターを開く</small></button><button class="quick" data-action="export-story"><b>Story Studio</b><small>人生資産を書き出す</small></button><button class="quick" data-action="export-product"><b>商品設計</b><small>経験を商品へ送る</small></button><button class="quick" data-action="export-kotka"><b>KOTKA AI経営OS</b><small>事業データを書き出す</small></button></div>
   ${sectionHead('データ内訳','現在この端末にある有効データ')}<div class="grid grid-3">${counts.map(([label,rows])=>`<div class="card metric-card"><span class="metric-icon">${activeRows(rows).length}</span><div><small>登録件数</small><b>${label}</b></div></div>`).join('')}</div>
   ${trash.length?`${sectionHead('最近削除したデータ','同期のため削除履歴を保持しています。必要なら復元できます。')}<div class="record-list">${trash.slice(-10).reverse().map(row=>`<article class="record"><span class="record-date">削除済み</span><div><span class="badge red">${esc(KIND_LABELS[row.kind]||row.kind)}</span><h3>${esc(row.title)}</h3></div><div class="record-actions"><button class="btn small secondary" data-action="restore-record" data-kind="${esc(row.kind)}" data-id="${esc(row.id)}">復元</button></div></article>`).join('')}</div>`:''}</div>`;
 }
@@ -648,7 +743,7 @@ function renderSearch() {
   return `<div class="page-enter"><div class="search-box"><input id="globalSearch" type="search" placeholder="記録・健康・目標・夢・行きたい場所・挑戦・体験などを検索" autocomplete="off"></div><div class="filter-row"><button class="filter-chip active" data-search-kind="all">すべて</button>${Object.entries(KIND_LABELS).map(([kind,label])=>`<button class="filter-chip" data-search-kind="${kind}">${label}</button>`).join('')}</div>${sectionHead('検索結果','入力すると全データから探します。')}<div id="searchResults" class="record-list"><div class="empty">検索語を入力してください</div></div></div>`;
 }
 
-const DUPLICATE_CHECK_KINDS = new Set(['goal','habit','wish','healthItem','timeline','comparison','product']);
+const DUPLICATE_CHECK_KINDS = new Set(['goal','habit','wish','healthItem','timeline','comparison','product','fixedCostRecord','debtRecord']);
 const duplicateCheckEnabled = kind => DUPLICATE_CHECK_KINDS.has(kind);
 
 function duplicateSummaryHtml(rows, kind) {
@@ -703,10 +798,10 @@ function recordCard(row, fallbackKind) {
   const completionLabel = kind === 'wish' ? '実現済み' : '達成済み';
   const wishClass = kind === 'wish' ? wishTypeClass(row.details?.wishType) : '';
   const attachments = Array.isArray(row.details?.attachments) ? row.details.attachments : [];
-  const incomeCard = kind === 'incomeRecord' || row.domain === 'income';
-  const incomeAmountHtml = incomeCard && row.details?.amount !== undefined && row.details?.amount !== ''
-    ? `<strong class="income-card-amount">${incomeYen(incomeAmount(row))}</strong>` : '';
-  return `<article class="record ${wishClass} ${incomeCard?'income-record':''} ${completed?'completed':''}">${completed?`<span class="completion-ribbon">✓ ${completionLabel}</span>`:''}<span class="record-date">${displayDate(row.date)}</span><div><span class="badge">${esc(domainLabel(row.domain))}</span><h3>${esc(row.title)}</h3>${incomeAmountHtml}<p>${esc(row.body)}</p>${progress!==null?`<div class="progress" title="進捗 ${progress}%"><i style="width:${Math.max(0,Math.min(100,progress))}%"></i></div>`:''}<div class="record-meta">${row.details?.incomeType?`<span class="badge income-type-tag">${esc(row.details.incomeType)}</span>`:''}${row.details?.sourceName?`<span class="badge">収入元 ${esc(row.details.sourceName)}</span>`:''}${row.details?.incomePeriod?`<span class="badge">${esc(row.details.incomePeriod)}</span>`:''}${row.details?.incomeStatus?`<span class="badge ${row.details.incomeStatus==='見込'?'warn':row.details.incomeStatus==='確定'?'completion':''}">${esc(row.details.incomeStatus)}</span>`:''}${row.details?.amountKind?`<span class="badge">${esc(row.details.amountKind)}</span>`:''}${row.details?.wishType?`<span class="badge wish-type-tag ${wishClass}">${esc(row.details.wishType)}</span>`:''}${row.details?.wishArea?`<span class="badge wish-area-tag wish-area-${wishAreaClass(row.details.wishArea)}">${esc(row.details.wishArea)}</span>`:''}${row.details?.experienceType?`<span class="badge">${esc(row.details.experienceType)}</span>`:''}${kind==='healthItem'?`<span class="badge health-type-tag">${esc(healthItemType(row))}</span>`:''}${row.details?.medicalStatus?`<span class="badge ${row.details.medicalStatus==='完了'?'done':row.details.medicalStatus==='実施予定'?'warn':''}">${esc(row.details.medicalStatus)}</span>`:''}${row.details?.facilityWishId&&relatedMedicalPlaceName(row.details.facilityWishId)?`<span class="badge medical-facility">医療機関 ${esc(relatedMedicalPlaceName(row.details.facilityWishId))}</span>`:''}${impactBadge('身体',row.details?.physicalImpact)}${impactBadge('メンタル',row.details?.mentalImpact)}${impactBadge('収入',row.details?.incomeImpact)}${row.details?.wishStatus?`<span class="badge ${row.details.wishStatus==='実現済み'?'completion':''}">${esc(row.details.wishStatus)}</span>`:''}${row.details?.goalStatus?`<span class="badge ${row.details.goalStatus==='達成済み'?'completion':''}">${esc(row.details.goalStatus)}</span>`:''}${row.details?.priority?`<span class="badge ${row.details.priority==='高'?'warn':''}">優先度 ${esc(row.details.priority)}</span>`:''}${row.details?.frequency?`<span class="badge">${esc(row.details.frequency)}</span>`:''}${row.details?.budget?`<span class="badge">予算 ${esc(row.details.budget)}</span>`:''}</div>${referenceLinksHtml(row.details,true)}${attachments.map(file=>`<a class="attachment-link" href="${esc(file.url)}" target="_blank" rel="noopener noreferrer">添付：${esc(file.name)}</a>`).join('')}</div><div class="record-actions"><button class="btn small ghost" data-action="view-record" data-kind="${esc(kind)}" data-id="${esc(row.id)}">見る</button><button class="btn small ghost" data-action="edit-record" data-kind="${esc(kind)}" data-id="${esc(row.id)}">編集</button><button class="btn small danger" data-action="delete-record" data-kind="${esc(kind)}" data-id="${esc(row.id)}">削除</button></div></article>`;
+  const financeCard = FINANCE_RECORD_KINDS.has(kind) || row.domain === 'income';
+  const primaryMoney = kind === 'debtRecord' ? moneyNumber(row.details?.remainingBalance || row.details?.originalAmount) : moneyNumber(row.details?.amount);
+  const incomeAmountHtml = financeCard && primaryMoney > 0 ? `<strong class="income-card-amount">${incomeYen(primaryMoney)}${kind==='debtRecord'?'<small> 現在残高</small>':''}</strong>` : '';
+  return `<article class="record ${wishClass} ${financeCard?'income-record':''} ${completed?'completed':''}">${completed?`<span class="completion-ribbon">✓ ${completionLabel}</span>`:''}<span class="record-date">${displayDate(row.date)}</span><div><span class="badge">${esc(financeCard?'お金':domainLabel(row.domain))}</span><h3>${esc(row.title)}</h3>${incomeAmountHtml}<p>${esc(row.body)}</p>${progress!==null?`<div class="progress" title="進捗 ${progress}%"><i style="width:${Math.max(0,Math.min(100,progress))}%"></i></div>`:''}<div class="record-meta">${row.details?.incomeType?`<span class="badge income-type-tag">${esc(row.details.incomeType)}</span>`:''}${row.details?.sourceName?`<span class="badge">収入元 ${esc(row.details.sourceName)}</span>`:''}${row.details?.incomePeriod?`<span class="badge">${esc(row.details.incomePeriod)}</span>`:''}${row.details?.incomeStatus?`<span class="badge ${row.details.incomeStatus==='見込'?'warn':row.details.incomeStatus==='確定'?'completion':''}">${esc(row.details.incomeStatus)}</span>`:''}${row.details?.amountKind?`<span class="badge">${esc(row.details.amountKind)}</span>`:''}${row.details?.expenseType?`<span class="badge expense-type-tag">${esc(row.details.expenseType)}</span>`:''}${row.details?.expensePeriod?`<span class="badge">${esc(row.details.expensePeriod)}</span>`:''}${row.details?.expenseStatus?`<span class="badge ${row.details.expenseStatus==='予定'?'warn':''}">${esc(row.details.expenseStatus)}</span>`:''}${row.details?.fixedCostType?`<span class="badge fixed-type-tag">${esc(row.details.fixedCostType)}</span>`:''}${row.details?.fixedCostFrequency?`<span class="badge">${esc(row.details.fixedCostFrequency)}</span>`:''}${row.details?.fixedCostStatus?`<span class="badge ${row.details.fixedCostStatus==='見直し候補'?'warn':''}">${esc(row.details.fixedCostStatus)}</span>`:''}${row.details?.debtType?`<span class="badge debt-type-tag">${esc(row.details.debtType)}</span>`:''}${row.details?.lenderName?`<span class="badge">借入先 ${esc(row.details.lenderName)}</span>`:''}${row.details?.monthlyPayment?`<span class="badge">毎月返済 ${incomeYen(moneyNumber(row.details.monthlyPayment))}</span>`:''}${row.details?.debtStatus?`<span class="badge ${row.details.debtStatus==='完済'?'completion':row.details.debtStatus==='返済猶予'?'warn':''}">${esc(row.details.debtStatus)}</span>`:''}${row.details?.wishType?`<span class="badge wish-type-tag ${wishClass}">${esc(row.details.wishType)}</span>`:''}${row.details?.wishArea?`<span class="badge wish-area-tag wish-area-${wishAreaClass(row.details.wishArea)}">${esc(row.details.wishArea)}</span>`:''}${row.details?.experienceType?`<span class="badge">${esc(row.details.experienceType)}</span>`:''}${kind==='healthItem'?`<span class="badge health-type-tag">${esc(healthItemType(row))}</span>`:''}${row.details?.medicalStatus?`<span class="badge ${row.details.medicalStatus==='完了'?'done':row.details.medicalStatus==='実施予定'?'warn':''}">${esc(row.details.medicalStatus)}</span>`:''}${row.details?.facilityWishId&&relatedMedicalPlaceName(row.details.facilityWishId)?`<span class="badge medical-facility">医療機関 ${esc(relatedMedicalPlaceName(row.details.facilityWishId))}</span>`:''}${impactBadge('身体',row.details?.physicalImpact)}${impactBadge('メンタル',row.details?.mentalImpact)}${impactBadge('収入',row.details?.incomeImpact)}${row.details?.wishStatus?`<span class="badge ${row.details.wishStatus==='実現済み'?'completion':''}">${esc(row.details.wishStatus)}</span>`:''}${row.details?.goalStatus?`<span class="badge ${row.details.goalStatus==='達成済み'?'completion':''}">${esc(row.details.goalStatus)}</span>`:''}${row.details?.priority?`<span class="badge ${row.details.priority==='高'?'warn':''}">優先度 ${esc(row.details.priority)}</span>`:''}${row.details?.frequency?`<span class="badge">${esc(row.details.frequency)}</span>`:''}${row.details?.budget?`<span class="badge">予算 ${esc(row.details.budget)}</span>`:''}</div>${referenceLinksHtml(row.details,true)}${attachments.map(file=>`<a class="attachment-link" href="${esc(file.url)}" target="_blank" rel="noopener noreferrer">添付：${esc(file.name)}</a>`).join('')}</div><div class="record-actions"><button class="btn small ghost" data-action="view-record" data-kind="${esc(kind)}" data-id="${esc(row.id)}">見る</button><button class="btn small ghost" data-action="edit-record" data-kind="${esc(kind)}" data-id="${esc(row.id)}">編集</button><button class="btn small danger" data-action="delete-record" data-kind="${esc(kind)}" data-id="${esc(row.id)}">削除</button></div></article>`;
 }
 
 function render() {
@@ -760,6 +855,10 @@ function bindPage() {
     });
     document.querySelectorAll('[data-wish-panel]').forEach(panel=>panel.classList.toggle('mobile-active',panel.dataset.wishPanel===wishTab));
   }));
+  document.querySelectorAll('[data-finance-tab]').forEach(button => button.addEventListener('click',()=>{
+    financeTab=button.dataset.financeTab;
+    render();
+  }));
   document.querySelectorAll('#costQuestions,#costInputTokens,#costOutputTokens,#costUsdJpy').forEach(input => input.addEventListener('input', updateCostPreview));
 }
 
@@ -772,7 +871,7 @@ function detailFieldHtml(kind, details = {}) {
       const places = medicalPlaceWishes();
       return `<div class="field" data-detail-field="${esc(key)}"><label>${label}</label><select name="detail__${key}"><option value="">選択しない</option>${places.map(place=>`<option value="${esc(place.id)}" ${String(value)===place.id?'selected':''}>${esc(place.title)}</option>`).join('')}</select><span class="hint">「人生設計 → 行きたい場所」で分野を「医療」にした病院・クリニックから選べます。</span></div>`;
     }
-    const numberLimits = type === 'number' ? (['energy','progress'].includes(key) ? 'min="0" max="100"' : 'min="0" step="1"') : '';
+    const numberLimits = type === 'number' ? (['energy','progress'].includes(key) ? 'min="0" max="100"' : key === 'interestRate' ? 'min="0" step="0.01"' : 'min="0" step="1"') : '';
     return `<div class="field" data-detail-field="${esc(key)}"><label>${label}</label><input name="detail__${key}" type="${type}" value="${esc(value)}" ${numberLimits}></div>`;
   }).join('');
 }
@@ -785,24 +884,30 @@ function openRecordDialog(kind, id = '', preset = {}) {
   const dialog = $('#recordDialog');
   const titlePlaceholder = kind === 'wish' ? '例：キャンピングカー、北海道旅行、Kindle出版'
     : kind === 'incomeRecord' ? '例：給与、傷病手当、副業売上、年金'
+    : kind === 'expenseRecord' ? '例：眼科の治療費、車検、家電購入、国民健康保険'
+    : kind === 'fixedCostRecord' ? '例：家賃、スマホ代、保険料、サブスク'
+    : kind === 'debtRecord' ? '例：○○銀行ローン、家族からの借入、事業借入'
     : kind === 'habit' ? '例：朝食を食べる、30分歩く、23時までに寝る'
     : kind === 'healthItem' ? '例：左目の状態、角膜手術の計画、大学病院への受診'
     : '例：朝の血圧、今月の目標、事業アイデア';
   const bodyPlaceholder = kind === 'wish' ? '欲しいもの・場所・挑戦・体験と、叶えたいイメージを自由に書いてください'
     : kind === 'incomeRecord' ? '入金条件・期間・変動理由など、必要な補足だけを書いてください'
+    : kind === 'expenseRecord' ? '何のための支出か、今後も発生するかなど必要な補足を書いてください'
+    : kind === 'fixedCostRecord' ? '契約内容、見直したい点、解約条件など必要な補足を書いてください'
+    : kind === 'debtRecord' ? '借入の背景、返済上の注意点、契約メモなどを書いてください'
     : '事実や気づきを自由に書いてください';
   const urlLabel = kind === 'wish' ? '関連URL（商品・場所・体験のページ）'
-    : kind === 'incomeRecord' ? '関連URL（明細・制度・サービスのページ）'
+    : FINANCE_RECORD_KINDS.has(kind) ? '関連URL（明細・契約・制度・サービスのページ）'
     : '関連URL（参考ページ・地図・予約ページなど）';
-  const titleLabel = kind === 'incomeRecord' ? '収入名' : 'タイトル';
-  const bodyLabel = kind === 'incomeRecord' ? '補足・メモ' : '概要・自由メモ';
+  const titleLabel = kind === 'incomeRecord' ? '収入名' : kind === 'expenseRecord' ? '支出名' : kind === 'fixedCostRecord' ? '固定費名' : kind === 'debtRecord' ? '負債・借入名' : 'タイトル';
+  const bodyLabel = FINANCE_RECORD_KINDS.has(kind) ? '補足・メモ' : '概要・自由メモ';
   const selectedDomain = existing?.domain || preset.domain || defaultDomain(kind);
-  const domainField = kind === 'incomeRecord'
-    ? '<div class="field"><label>分野</label><div class="locked-field">収入</div><input name="domain" type="hidden" value="income"></div>'
+  const domainField = FINANCE_RECORD_KINDS.has(kind)
+    ? '<div class="field"><label>分野</label><div class="locked-field">お金</div><input name="domain" type="hidden" value="income"></div>'
     : `<div class="field"><label>関連する分野</label><select name="domain">${DOMAINS.map(domain=>`<option value="${domain.id}" ${selectedDomain===domain.id?'selected':''}>${domain.label}</option>`).join('')}</select></div>`;
   const existingLinks = normalizeReferenceLinks(existing?.details || {});
   const editorLinks = existingLinks.length ? existingLinks : (preset.referenceLinks?.length ? preset.referenceLinks : [{}]);
-  dialog.innerHTML = `<form id="recordForm"><div class="modal-head"><div><span class="badge">${existing?'編集':'新規'}</span><h2>${esc(KIND_LABELS[kind])}</h2></div><button class="icon-btn" type="button" data-close>×</button></div><div class="modal-body form-grid"><input type="hidden" name="kind" value="${kind}"><div class="field"><label>日付</label><input name="date" type="date" value="${esc(existing?.date || preset.date || localDateKey())}" required></div>${domainField}<div class="field full"><label>${titleLabel}</label><input name="title" value="${esc(existing?.title || preset.title || '')}" required placeholder="${titlePlaceholder}"></div><div class="field full"><label>${bodyLabel}</label><textarea name="body" placeholder="${bodyPlaceholder}">${esc(existing?.body || preset.body || '')}</textarea></div>${profileReferenceHtml(kind,{context:'editor'})}${detailFieldHtml(kind,seedDetails)}<div class="field full reference-links-field"><label>${urlLabel}（最大${MAX_REFERENCE_LINKS}件）</label><div id="referenceLinkRows" class="reference-link-editor">${editorLinks.map(referenceLinkEditorRow).join('')}</div><button class="btn small secondary add-reference" type="button" data-add-reference>＋ リンクを追加</button><span class="hint">公式サイト・SNS・YouTube・地図・予約／購入ページなど。名前は自由、https://は省略できます。</span></div><div class="field full"><label>タグ</label><input name="tags" value="${esc((existing?.tags||[]).join('、'))}" placeholder="${kind==='incomeRecord'?'給与、年金、副収入 など':kind==='habit'?'食事、ウォーキング、睡眠 など':'健康、挑戦、家族 など'}"></div><div class="field full duplicate-editor-slot" id="duplicateEditorSlot" hidden></div><div class="field full"><label>${kind==='incomeRecord'?'明細画像・添付':'画像・添付'}（任意・8MB以下）</label><input name="attachment" type="file"><span class="hint">添付はGoogle Driveへ保存します。同期設定が必要です。</span></div><p class="mobile-sheet-note field full">下へスクロールすると保存ボタンがあります。</p></div><div class="modal-actions"><button class="btn ghost" type="button" data-close>キャンセル</button><button class="btn" type="submit">${existing?'更新する':'保存する'}</button></div></form>`;
+  dialog.innerHTML = `<form id="recordForm"><div class="modal-head"><div><span class="badge">${existing?'編集':'新規'}</span><h2>${esc(KIND_LABELS[kind])}</h2></div><button class="icon-btn" type="button" data-close>×</button></div><div class="modal-body form-grid"><input type="hidden" name="kind" value="${kind}"><div class="field"><label>日付</label><input name="date" type="date" value="${esc(existing?.date || preset.date || localDateKey())}" required></div>${domainField}<div class="field full"><label>${titleLabel}</label><input name="title" value="${esc(existing?.title || preset.title || '')}" required placeholder="${titlePlaceholder}"></div><div class="field full"><label>${bodyLabel}</label><textarea name="body" placeholder="${bodyPlaceholder}">${esc(existing?.body || preset.body || '')}</textarea></div>${profileReferenceHtml(kind,{context:'editor'})}${detailFieldHtml(kind,seedDetails)}<div class="field full reference-links-field"><label>${urlLabel}（最大${MAX_REFERENCE_LINKS}件）</label><div id="referenceLinkRows" class="reference-link-editor">${editorLinks.map(referenceLinkEditorRow).join('')}</div><button class="btn small secondary add-reference" type="button" data-add-reference>＋ リンクを追加</button><span class="hint">公式サイト・SNS・YouTube・地図・予約／購入ページなど。名前は自由、https://は省略できます。</span></div><div class="field full"><label>タグ</label><input name="tags" value="${esc((existing?.tags||[]).join('、'))}" placeholder="${FINANCE_RECORD_KINDS.has(kind)?'医療、生活、事業、返済 など':kind==='habit'?'食事、ウォーキング、睡眠 など':'健康、挑戦、家族 など'}"></div><div class="field full duplicate-editor-slot" id="duplicateEditorSlot" hidden></div><div class="field full"><label>${FINANCE_RECORD_KINDS.has(kind)?'明細・契約書画像／添付':'画像・添付'}（任意・8MB以下）</label><input name="attachment" type="file"><span class="hint">添付はGoogle Driveへ保存します。同期設定が必要です。</span></div><p class="mobile-sheet-note field full">下へスクロールすると保存ボタンがあります。</p></div><div class="modal-actions"><button class="btn ghost" type="button" data-close>キャンセル</button><button class="btn" type="submit">${existing?'更新する':'保存する'}</button></div></form>`;
   dialog.showModal();
   dialog.querySelectorAll('[data-close]').forEach(button => button.onclick=()=>dialog.close());
   const linkRows = dialog.querySelector('#referenceLinkRows');
@@ -941,12 +1046,15 @@ function openRecordDialog(kind, id = '', preset = {}) {
 
 function detailDisplayValue(key, value) {
   if (key === 'facilityWishId') return relatedMedicalPlaceName(value) || value;
+  if (['amount','originalAmount','remainingBalance','monthlyPayment'].includes(key) && String(value).trim() !== '') return incomeYen(moneyNumber(value));
+  if (key === 'interestRate' && String(value).trim() !== '') return `${value}%`;
   return value;
 }
 
+
 function defaultDomain(kind) {
   if (kind === 'healthItem') return 'health';
-  if (kind === 'incomeRecord') return 'income';
+  if (FINANCE_RECORD_KINDS.has(kind)) return 'income';
   if (kind === 'product') return 'work';
   if (kind === 'goal') return 'challenge';
   if (kind === 'wish') return 'freedom';
@@ -1068,6 +1176,7 @@ async function handleAction(action, element) {
     if (action === 'run-simulation') return runSimulation();
     if (action === 'generate-review') return generateReview(element.dataset.period,element);
     if (action === 'sync') return performSync();
+    if (action === 'refresh-notebooklm') return refreshNotebookLM(element);
     if (action === 'test-connection') {
       const url = $('#gasUrl')?.value.trim() || state.settings.gasUrl;
       const token = $('#syncToken')?.value.trim() || state.settings.syncToken;
@@ -1193,11 +1302,11 @@ async function registerServiceWorker() {
   if (!('serviceWorker' in navigator)) return;
   const hadController = Boolean(navigator.serviceWorker.controller);
   try {
-    const registration = await navigator.serviceWorker.register('./sw.js?v=2.9.0', { updateViaCache:'none' });
+    const registration = await navigator.serviceWorker.register('./sw.js?v=3.1.0', { updateViaCache:'none' });
     await registration.update();
     if (hadController) {
       navigator.serviceWorker.addEventListener('controllerchange',()=>{
-        const refreshKey='life-compass-sw-refresh-v2.9.0';
+        const refreshKey='life-compass-sw-refresh-v3.1.0';
         if(sessionStorage.getItem(refreshKey))return;
         sessionStorage.setItem(refreshKey,'1');
         location.reload();

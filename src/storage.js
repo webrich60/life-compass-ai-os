@@ -257,6 +257,23 @@ export async function synchronize(state) {
   return saveCache({ ...saved, meta: { ...saved.meta, lastSyncedAt: isoNow() } }, { touch: false });
 }
 
+
+export async function refreshNotebookLMSheets(state) {
+  const gasUrl = state?.settings?.gasUrl || '';
+  const token = state?.settings?.syncToken || '';
+  if (!gasUrl) throw new Error('設定画面でGAS同期URLを登録してください');
+  if (!token) throw new Error('設定画面で同期トークンを登録してください');
+  const res = await fetch(gasUrl, {
+    method: 'POST', redirect: 'follow',
+    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+    body: JSON.stringify({ action: 'refresh_notebooklm', token })
+  });
+  if (!res.ok) throw new Error(`NotebookLM用シートの更新に失敗しました（${res.status}）`);
+  const json = await res.json();
+  if (!json.ok) throw new Error(json.error || 'NotebookLM用シートを更新できませんでした');
+  return json;
+}
+
 export async function testConnection(gasUrl, token) {
   const state = await fetchCloud(gasUrl, token);
   return { ok: true, revision: Number(state.meta?.revision || 0) };
