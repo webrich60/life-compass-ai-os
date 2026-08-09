@@ -315,3 +315,42 @@ button:disabled{cursor:wait;opacity:.58}
   .finance-metrics{grid-template-columns:1fr 1fr}.finance-metrics .metric-card{min-height:90px;padding:15px}.finance-metrics .metric-card b{font-size:19px}
 }
 @media(max-width:430px){.finance-metrics{grid-template-columns:1fr}.finance-tabs{grid-template-columns:1fr 1fr}.finance-tabs button b{font-size:13px}}
+
+/* v3.2.0: 完了状態と目標期限アラート */
+.btn.completion-action{background:#177a55;color:#fff;box-shadow:0 6px 14px rgba(23,122,85,.18)}
+.btn.completion-action:hover{filter:brightness(1.06)}
+.record-actions .completion-action{white-space:nowrap}
+.task.goal-task{position:relative;align-items:center;gap:10px;border:1px solid #d6e0ed;border-radius:15px;padding:12px;margin-bottom:8px;background:#fff}
+.task.goal-task:last-child{border-bottom:1px solid #d6e0ed}
+.task.goal-task.completed{border:2px solid #e45a78;background:linear-gradient(145deg,#fff7f9,#ffe9ef);box-shadow:0 7px 20px rgba(196,47,84,.1)}
+.task.goal-task.completed .task-main b{color:#84233e;text-decoration:none}
+.task.goal-task .task-main small{margin-top:4px}
+.task.goal-task .task-badges{display:flex;flex-wrap:wrap;gap:6px;justify-content:flex-end}
+.deadline-badge{display:inline-flex;align-items:center;width:max-content;max-width:100%;margin-top:7px;padding:5px 9px;border-radius:999px;border:1px solid transparent;font-size:11px;font-weight:850;line-height:1.35}
+.deadline-badge.deadline-soon{background:#eef5ff;color:#24588f;border-color:#b4cae4}
+.deadline-badge.deadline-week{background:#fff6d9;color:#745208;border-color:#e4cb79}
+.deadline-badge.deadline-urgent,.deadline-badge.deadline-today{background:#ffe8d3;color:#914308;border-color:#eba96a}
+.deadline-badge.deadline-overdue{background:#ffe3e6;color:#a32436;border-color:#e99aa5}
+.record.deadline-week{border-color:#dfc36a}.record.deadline-urgent,.record.deadline-today{border-color:#e7954f;box-shadow:0 7px 20px rgba(215,126,43,.1)}.record.deadline-overdue{border:2px solid #df6676;background:#fff9fa}
+.deadline-alert-panel{margin:0 0 15px;padding:15px;border:1.5px solid #dfc36a;border-radius:18px;background:linear-gradient(145deg,#fffdf6,#fff8df);box-shadow:var(--shadow-sm)}
+.deadline-alert-panel.has-urgent{border-color:#e7954f;background:linear-gradient(145deg,#fffaf6,#fff0e2)}
+.deadline-alert-head{display:flex;align-items:center;justify-content:space-between;gap:14px;margin-bottom:10px}
+.deadline-alert-head>div{display:flex;align-items:flex-start;gap:10px}.deadline-alert-head>div>span{font-size:22px;line-height:1}
+.deadline-alert-head b,.deadline-alert-head small{display:block}.deadline-alert-head b{font-size:15px;color:#5a3d0b}.deadline-alert-head small{margin-top:3px;color:#765c2b;font-size:12px;font-weight:650;line-height:1.5}
+.deadline-count{flex:0 0 auto;padding:5px 10px;border-radius:999px;background:#fff;color:#8a5707;border:1px solid #e4c477;font-size:12px;font-weight:850}
+.deadline-alert-list{display:grid;gap:7px}.deadline-alert-item{width:100%;border:1px solid #ead9a7;border-radius:13px;background:rgba(255,255,255,.86);padding:10px 12px;display:flex;align-items:center;justify-content:space-between;gap:12px;text-align:left;color:var(--ink)}
+.deadline-alert-item:hover{background:#fff}.deadline-alert-item div{min-width:0}.deadline-alert-item b,.deadline-alert-item small{display:block}.deadline-alert-item b{font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.deadline-alert-item small{font-size:11px;color:var(--muted);margin-top:3px}.deadline-alert-item>span{flex:0 0 auto;padding:5px 8px;border-radius:999px;font-size:11px;font-weight:850;background:#fff5d6;color:#795208}
+.deadline-alert-item.deadline-urgent>span,.deadline-alert-item.deadline-today>span{background:#ffe7d1;color:#934305}.deadline-alert-item.deadline-overdue>span{background:#ffe0e4;color:#a52436}
+@media(max-width:700px){
+  .task.goal-task{display:grid;grid-template-columns:1fr auto;align-items:start;padding:13px}.task.goal-task>.completion-action,.task.goal-task>.btn.ghost{grid-column:1/-1;grid-row:auto;width:100%;order:3}.task.goal-task .task-main{grid-column:1}.task.goal-task .task-badges{grid-column:2;grid-row:1;justify-content:flex-end}.task.goal-task .deadline-badge{font-size:12px}
+  .record-actions .completion-action{order:-1}.deadline-alert-panel{padding:13px}.deadline-alert-head{align-items:flex-start}.deadline-alert-item{align-items:flex-start}.deadline-alert-item>span{white-space:nowrap}
+}
+
+
+/* v3.3.0: AI質問プリセット */
+.ai-question-picker{padding:14px;border:1px solid rgba(28,104,190,.14);border-radius:16px;background:linear-gradient(180deg,rgba(239,246,255,.88),rgba(255,255,255,.96))}
+.ai-question-picker label{font-size:14px;color:var(--ink);font-weight:850}
+.ai-question-picker select{border-color:rgba(28,104,190,.3);background:#fff;font-weight:750}
+.ai-question-picker .hint{line-height:1.55;color:var(--ink-2)}
+.ai-question-actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:2px}
+@media(max-width:760px){.ai-question-picker{padding:13px}.ai-question-picker label{font-size:15px}.ai-question-picker .hint{font-size:13px}.ai-question-actions{display:grid;grid-template-columns:1fr}.ai-question-actions .btn{width:100%}}

@@ -1,7 +1,7 @@
-const CACHE='life-compass-ai-os-v3.1.0';
+const CACHE='life-compass-ai-os-v3.3.0';
 const CACHE_PREFIX='life-compass-ai-os-';
 const HOME_URL=new URL('./index.html',self.location.href).href;
-const ASSETS=['./index.html','./styles.css?v=3.1.0','./manifest.webmanifest?v=3.1.0','./assets/icon.svg','./src/app.js?v=3.1.0','./src/model.js','./src/storage.js','./src/migration.js','./src/ai.js','./src/integrations.js','./src/duplicates.js'];
+const ASSETS=['./index.html','./styles.css?v=3.3.0','./manifest.webmanifest?v=3.3.0','./assets/icon.svg','./src/app.js?v=3.3.0','./src/model.js','./src/storage.js','./src/migration.js','./src/ai.js','./src/integrations.js','./src/duplicates.js'];
 
 self.addEventListener('install',event=>{
   event.waitUntil(caches.open(CACHE).then(cache=>cache.addAll(ASSETS)).then(()=>self.skipWaiting()));
