@@ -5,6 +5,7 @@ export const DATA_SCOPE_OPTIONS = [
   ['values', '価値観・強み', '価値観・好きなこと・強み・実績'],
   ['work', '仕事・経歴', '仕事歴と仕事分野の記録'],
   ['goals', '目標', '期限・進捗・優先度'],
+  ['priorityIssues', '最優先課題', '急な問題・重要課題・期限・対応順'],
   ['habits', '習慣', '習慣と継続基準'],
   ['wishes', '夢・楽しみ', '欲しいもの・場所・挑戦・体験'],
   ['scores', '人生レーダー', '8分野の現在点'],
@@ -74,6 +75,7 @@ export function buildScopedContext(state, scopes = {}) {
       : null;
   }
   if (scopes.goals) context.goals = takeAllowed(state.goals, 30, scopes);
+  if (scopes.priorityIssues) context.priorityIssues = takeAllowed((state.records || []).filter(row => row.kind === 'priorityIssue'), 30, scopes);
   if (scopes.habits) context.habits = takeAllowed(state.habits, 30, scopes);
   if (scopes.wishes) context.wishes = takeAllowed(state.wishes, 40, scopes);
   if (scopes.timeline) context.timeline = takeAllowed(state.timeline, 60, scopes);
@@ -110,7 +112,7 @@ export function buildCloneKnowledgeMarkdown(state, scopes) {
   const labels = {
     profile: 'プロフィール', scores: '人生レーダー', goals: '目標', habits: '習慣',
     wishes: '夢・楽しみ', timeline: '人生タイムライン', products: '商品・事業',
-    reviews: '定期レビュー', health: '健康・受診準備', recentRecords: '最近の記録',
+    reviews: '定期レビュー', health: '健康・受診準備', priorityIssues: '最優先課題', recentRecords: '最近の記録',
     workRecords: '仕事の記録', familyRecords: '家族の記録', incomeRecords: '収入の記録',
     aiHistory: 'AI相談履歴'
   };
@@ -146,12 +148,14 @@ export function buildCloneInstructions() {
 
 【回答ルール】
 1. 「登録データにある事実」「推測」「改善案」を混ぜない。
-2. 不明な情報は不明と伝え、知識資料にない事実を作らない。
-3. 優先順位は多くても3つ、最後に今日始められる一歩を1つ示す。
-4. 医療診断・投薬指示を行わず、危険性がある場合は医療機関への相談を促す。
-5. 未来を断定せず、条件付きの可能性として説明する。
-6. 家族・健康・金銭・住所などの情報を外部共有用の文章へ無断で含めない。
-7. Life Compassが正本であり、知識ファイルは作成日時点の情報だと認識する。
+2. 利用者が期待している結論に合わせるために分析結果を変えない。良いものは根拠とともに良いと評価し、問題があるもの・現実性が低いもの・負担が大きいものは理由を明確に指摘する。
+3. 本人の希望と客観的分析が一致しない場合は、その違いを明示する。判断材料が足りない場合は無理に結論を出さず「判断材料不足」とする。
+4. 最優先課題・期限・安全・生活維持を確認し、夢や長期目標とのバランスを取る。
+5. 優先順位は多くても3つ、最後に今日始められる一歩を1つ示す。
+6. 医療診断・投薬指示を行わず、危険性がある場合は医療機関への相談を促す。
+7. 未来を断定せず、条件付きの可能性として説明する。
+8. 家族・健康・金銭・住所などの情報を外部共有用の文章へ無断で含めない。
+9. Life Compassが正本であり、知識ファイルは作成日時点の情報だと認識する。
 
 【標準の回答構成】
 - 結論

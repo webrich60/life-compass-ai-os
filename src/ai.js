@@ -8,7 +8,8 @@ export function buildContext(state) {
     habits: state.habits.filter(x => !x.deletedAt).slice(-20),
     wishes: state.wishes.filter(x => !x.deletedAt).slice(-30),
     health: state.healthItems.filter(x => !x.deletedAt).slice(-20),
-    recentRecords: state.records.filter(x => !x.deletedAt && x.domain !== 'income').slice(-30),
+    priorityIssues: state.records.filter(x => !x.deletedAt && x.kind === 'priorityIssue').slice(-30),
+    recentRecords: state.records.filter(x => !x.deletedAt && x.domain !== 'income' && x.kind !== 'priorityIssue').slice(-30),
     incomeRecords: state.records.filter(x => !x.deletedAt && (x.kind === 'incomeRecord' || (x.domain === 'income' && !['expenseRecord','fixedCostRecord','debtRecord'].includes(x.kind)))).slice(-30),
     financeRecords: state.records.filter(x => !x.deletedAt && (['incomeRecord','expenseRecord','fixedCostRecord','debtRecord'].includes(x.kind) || x.domain === 'income')).slice(-80),
     timeline: state.timeline.filter(x => !x.deletedAt).slice(-40),
@@ -29,7 +30,9 @@ export function buildAnalysisRequest(state, question, mode = 'cross') {
       structure: ['事実','推測','改善案','優先順位','今日の一歩'],
       medicalDiagnosis: false,
       simulationNotPrediction: true,
-      avoidOverconfidence: true
+      avoidOverconfidence: true,
+      noSycophancy: true,
+      realityBeforeWishfulThinking: true
     }
   };
 }
@@ -54,7 +57,7 @@ export function buildNotebookMarkdown(state) {
   for (const [k,v] of Object.entries(state.profile)) if (v && !['id','updatedAt'].includes(k)) lines.push(`- ${k}: ${v}`);
   lines.push('', '## 人生レーダー');
   for (const d of DOMAINS) lines.push(`- ${d.label}: ${state.scores[d.id] ?? 50}/100`);
-  const sections = [['目標',state.goals],['習慣',state.habits],['夢・楽しみ（欲しいもの・行きたい場所・やってみたいこと／挑戦／体験）',state.wishes],['健康',state.healthItems],['人生比較',state.comparisons],['人生タイムライン',state.timeline],['商品・事業',state.products],['定期レビュー',state.reviews],['未来シミュレーション',state.simulations],['収入',state.records.filter(x => x.kind === 'incomeRecord' || (x.domain === 'income' && !['expenseRecord','fixedCostRecord','debtRecord'].includes(x.kind)))],['支出',state.records.filter(x => x.kind === 'expenseRecord')],['固定費',state.records.filter(x => x.kind === 'fixedCostRecord')],['負債・借入',state.records.filter(x => x.kind === 'debtRecord')],['記録',state.records.filter(x => x.domain !== 'income')]];
+  const sections = [['最優先課題',state.records.filter(x => x.kind === 'priorityIssue')],['目標',state.goals],['習慣',state.habits],['夢・楽しみ（欲しいもの・行きたい場所・やってみたいこと／挑戦／体験）',state.wishes],['健康',state.healthItems],['人生比較',state.comparisons],['人生タイムライン',state.timeline],['商品・事業',state.products],['定期レビュー',state.reviews],['未来シミュレーション',state.simulations],['収入',state.records.filter(x => x.kind === 'incomeRecord' || (x.domain === 'income' && !['expenseRecord','fixedCostRecord','debtRecord'].includes(x.kind)))],['支出',state.records.filter(x => x.kind === 'expenseRecord')],['固定費',state.records.filter(x => x.kind === 'fixedCostRecord')],['負債・借入',state.records.filter(x => x.kind === 'debtRecord')],['記録',state.records.filter(x => x.domain !== 'income' && x.kind !== 'priorityIssue')]];
   for (const [label,rows] of sections) {
     lines.push('', `## ${label}`);
     for (const r of rows.filter(x => !x.deletedAt)) {

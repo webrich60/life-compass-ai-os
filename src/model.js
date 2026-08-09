@@ -1,7 +1,7 @@
 export const SCHEMA_VERSION = 4;
 
 export const DEFAULT_DATA_SCOPES = {
-  basicProfile: true, values: true, work: true, goals: true, habits: true,
+  basicProfile: true, values: true, work: true, goals: true, habits: true, priorityIssues: true,
   wishes: true, scores: true, recentRecords: true, timeline: true,
   products: true, reviews: false, health: false, family: false,
   location: false, finance: false, aiHistory: false
