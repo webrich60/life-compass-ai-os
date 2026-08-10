@@ -1,8 +1,8 @@
-export const SCHEMA_VERSION = 4;
+export const SCHEMA_VERSION = 5;
 
 export const DEFAULT_DATA_SCOPES = {
   basicProfile: true, values: true, work: true, goals: true, habits: true, priorityIssues: true,
-  wishes: true, scores: true, recentRecords: true, timeline: true,
+  futureLife: true, wishes: true, scores: true, recentRecords: true, timeline: true,
   products: true, reviews: false, health: false, family: false,
   location: false, finance: false, aiHistory: false
 };
@@ -14,6 +14,10 @@ export const DEFAULT_LINE_SCOPES = {
 export const WISH_TYPES = ['欲しいもの', '行きたい場所', 'やってみたいこと・挑戦・体験'];
 export const WISH_AREAS = ['一般', '健康・身体', '医療', 'メンタル', '仕事・収入', '家族', 'その他'];
 export const EXPERIENCE_TYPES = ['挑戦・成長', '趣味・体験', '人生で一度は'];
+
+export const FUTURE_LIFE_AREAS = ['健康','収入・お金','仕事・事業','家族','住宅・住環境','ライフスタイル','人間関係','学び','趣味・楽しみ','生き方・価値観','その他'];
+export const FUTURE_LIFE_STATUSES = ['方向性を考える','目指している','少し近づいた','かなり近づいた','実現している'];
+export const LIFE_PLANNING_HORIZON_AGE = 80;
 
 export function inferWishType(value = '') {
   const text = String(value).toLowerCase();
@@ -125,6 +129,7 @@ export function createEmptyState() {
     products: [],
     reviews: [],
     simulations: [],
+    futureVisions: [],
     aiHistory: [],
     settings: {
       persona: 'coach', provider: 'gemini',
@@ -140,6 +145,9 @@ export function createEmptyState() {
         gpt: {
           enabled: false, connected: false, useActions: false, gptUrl: '',
           plusMonthlyYen: 3000, scopes: { ...DEFAULT_DATA_SCOPES }
+        },
+        universal: {
+          enabled: true, scopes: { ...DEFAULT_DATA_SCOPES }
         },
         cost: {
           questionsPerDay: 10, inputTokens: 4000, outputTokens: 600,
@@ -220,6 +228,14 @@ export function normalizeState(raw = {}) {
         ...(incomingIntegrations.gpt?.scopes || {})
       }
     },
+    universal: {
+      ...base.settings.integrations.universal,
+      ...(incomingIntegrations.universal || {}),
+      scopes: {
+        ...base.settings.integrations.universal.scopes,
+        ...(incomingIntegrations.universal?.scopes || {})
+      }
+    },
     cost: {
       ...base.settings.integrations.cost,
       ...(incomingIntegrations.cost || {})
@@ -230,8 +246,8 @@ export function normalizeState(raw = {}) {
     const legacyScoreTime = raw.meta?.updatedAt || isoNow();
     state.scoreUpdatedAt = Object.fromEntries(Object.keys(raw.scores).map(key => [key, legacyScoreTime]));
   }
-  for (const key of ['records','goals','habits','wishes','healthItems','timeline','comparisons','products','reviews','simulations']) {
-    const kind = key === 'wishes' ? 'wish' : key.replace(/s$/, '');
+  for (const key of ['records','goals','habits','wishes','healthItems','timeline','comparisons','products','reviews','simulations','futureVisions']) {
+    const kind = key === 'wishes' ? 'wish' : key === 'futureVisions' ? 'futureVision' : key.replace(/s$/, '');
     state[key] = Array.isArray(raw[key]) ? raw[key].map(x => normalizeRecord(x, kind)) : [];
   }
   state.wishes = state.wishes.map(row => {

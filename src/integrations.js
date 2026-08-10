@@ -6,6 +6,7 @@ export const DATA_SCOPE_OPTIONS = [
   ['work', '仕事・経歴', '仕事歴と仕事分野の記録'],
   ['goals', '目標', '期限・進捗・優先度'],
   ['priorityIssues', '最優先課題', '急な問題・重要課題・期限・対応順'],
+  ['futureLife', 'これから作る理想の人生', '80歳を仮の時間軸にした未来の方向性・理想像・ギャップ'],
   ['habits', '習慣', '習慣と継続基準'],
   ['wishes', '夢・楽しみ', '欲しいもの・場所・挑戦・体験'],
   ['scores', '人生レーダー', '8分野の現在点'],
@@ -75,6 +76,7 @@ export function buildScopedContext(state, scopes = {}) {
       : null;
   }
   if (scopes.goals) context.goals = takeAllowed(state.goals, 30, scopes);
+  if (scopes.futureLife) context.futureLife = takeAllowed(state.futureVisions, 60, scopes);
   if (scopes.priorityIssues) context.priorityIssues = takeAllowed((state.records || []).filter(row => row.kind === 'priorityIssue'), 30, scopes);
   if (scopes.habits) context.habits = takeAllowed(state.habits, 30, scopes);
   if (scopes.wishes) context.wishes = takeAllowed(state.wishes, 40, scopes);
@@ -87,7 +89,10 @@ export function buildScopedContext(state, scopes = {}) {
   }
   if (scopes.work) context.workRecords = domainRows(state.records, ['work']);
   if (scopes.family) context.familyRecords = domainRows(state.records, ['family']);
-  if (scopes.finance) context.incomeRecords = domainRows(state.records, ['income']);
+  if (scopes.finance) {
+    context.financeRecords = takeLast((state.records || []).filter(row => ['incomeRecord','expenseRecord','fixedCostRecord','debtRecord'].includes(row.kind) || row.domain === 'income'), 100);
+    context.incomeRecords = context.financeRecords.filter(row => row.kind === 'incomeRecord' || (!['expenseRecord','fixedCostRecord','debtRecord'].includes(row.kind) && row.domain === 'income'));
+  }
   if (scopes.aiHistory) context.aiHistory = (state.aiHistory || []).slice(-30);
   return context;
 }
@@ -110,10 +115,10 @@ export function buildCloneKnowledgeMarkdown(state, scopes) {
     '> 最新情報はLife Compassを正本とし、このファイルは作成時点のスナップショットです。', ''
   ];
   const labels = {
-    profile: 'プロフィール', scores: '人生レーダー', goals: '目標', habits: '習慣',
+    profile: 'プロフィール', scores: '人生レーダー', goals: '目標', futureLife: 'これから作る理想の人生', habits: '習慣',
     wishes: '夢・楽しみ', timeline: '人生タイムライン', products: '商品・事業',
     reviews: '定期レビュー', health: '健康・受診準備', priorityIssues: '最優先課題', recentRecords: '最近の記録',
-    workRecords: '仕事の記録', familyRecords: '家族の記録', incomeRecords: '収入の記録',
+    workRecords: '仕事の記録', familyRecords: '家族の記録', incomeRecords: '収入の記録', financeRecords: 'お金の記録（収入・支出・固定費・負債）',
     aiHistory: 'AI相談履歴'
   };
   for (const [key, value] of Object.entries(context)) {
@@ -209,4 +214,53 @@ export function estimateGeminiCost(config = {}) {
     yearlyYen: dailyUsd * 365 * usdJpy,
     monthlyQuestions: questionsPerDay * 30
   };
+}
+
+
+export function buildUniversalAIContextMarkdown(state, scopes = {}) {
+  const context = buildScopedContext(state, scopes);
+  const lines = [
+    '# Life Compass｜Universal AI Context Pack', '',
+    `生成日時: ${new Date().toLocaleString('ja-JP')}`, '',
+    '## このファイルの役割',
+    '- Life Compassを本人情報の正本（メインの頭脳）とし、他のAIへ必要な背景を安全に渡すための可搬コンテキストです。',
+    '- 80歳は寿命予測ではなく、これからの人生を楽しみながら理想へ近づけるための仮の計画時間軸です。',
+    '- 理想は「達成できた／できない」だけで判定せず、現在の選択が理想の方向へ近づいているかを重視してください。',
+    '- 登録事実・本人の希望・AIの推測を区別し、本人が望む結論へ忖度しないでください。',
+    '- 最優先課題、健康・医療、お金、期限、安全を無視して夢だけを肯定しないでください。', '',
+    '## AIへの共通指示',
+    '1. 良いものは根拠を示して良いと評価し、悪いもの・現実性が低いものは理由を明確に指摘する。',
+    '2. 「理想の未来」と「欲しいもの・行きたい場所・やりたいこと・目標・行動」の方向性が合っているか確認する。',
+    '3. 完全実現が難しい場合でも、何割・どの部分なら近づけるか、代替案と次の一歩を示す。',
+    '4. 年齢・健康・医療・収入・固定費・負債・家族・時間を現実条件として扱う。',
+    '5. 判断材料が不足している場合は「判断材料不足」と明示する。', '',
+    buildCloneKnowledgeMarkdown(state, scopes)
+  ];
+  return lines.join('\n');
+}
+
+export function buildUniversalAIContextJson(state, scopes = {}) {
+  return {
+    format: 'LifeCompassUniversalAIContext',
+    version: '1.0',
+    generatedAt: isoNow(),
+    sourceOfTruth: 'Life Compass AI OS',
+    planningHorizon: {
+      horizonAge: 80,
+      meaning: '寿命予測ではなく、理想へ近づき人生を楽しむための仮の計画時間軸'
+    },
+    aiRules: {
+      noSycophancy: true,
+      separateFactsHopesAndInference: true,
+      realityBeforeWishfulThinking: true,
+      checkAlignmentWithIdealFuture: true,
+      offerPartialAndAlternativePaths: true,
+      sayInsufficientEvidenceWhenNeeded: true
+    },
+    context: buildScopedContext(state, scopes)
+  };
+}
+
+export function buildUniversalAIStarterPrompt() {
+  return `添付した「Life Compass Universal AI Context Pack」を、私に関する現在の正本コンテキストとして参照してください。\n\n回答では、登録された事実・私の希望・あなたの推測を区別してください。私が望みそうな結論へ寄せず、良いものは根拠とともに良い、問題があるものは理由とともに問題があると評価してください。\n\n特に「これから作る理想の人生」を方向の基準にしつつ、最優先課題、年齢、健康・医療、収入・支出・固定費・負債、家族、期限を現実条件として同時に見てください。80歳は寿命予測ではなく計画上の仮の時間軸です。完全実現が難しい場合は、理想を捨てるのではなく、近づける部分・代替案・今やる一歩を示してください。`;
 }

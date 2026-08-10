@@ -385,3 +385,39 @@ button:disabled{cursor:wait;opacity:.58}
   .calendar-panel{padding:11px}.calendar-toolbar{grid-template-columns:auto 1fr auto;gap:6px}.calendar-toolbar .btn{padding:8px 9px}.calendar-toolbar h2{font-size:18px}.calendar-legend{gap:5px}.calendar-legend span{padding:4px 7px;font-size:10px}.calendar-weekdays b{padding:5px 2px;font-size:11px}.calendar-day{min-height:55px;padding:4px;gap:2px}.calendar-day-number{font-size:12px}.calendar-day-events{display:none}.calendar-mobile-count{display:block;margin:auto 0 0;font-size:9px;font-weight:900;color:var(--accent)}.calendar-lower{grid-template-columns:1fr}.calendar-metrics{grid-template-columns:1fr 1fr}.calendar-detail-item{grid-template-columns:auto 1fr auto;padding:11px 6px}.calendar-detail-item b{font-size:14px}
 }
 @media(max-width:430px){.priority-metrics,.calendar-metrics{grid-template-columns:1fr}.priority-guide{grid-template-columns:1fr}.calendar-toolbar .btn{font-size:11px}.calendar-day{min-height:50px}.calendar-day-number{font-size:11px}.calendar-mobile-count{font-size:8px}}
+
+/* v3.5.0: これから作る理想の人生 + Universal AI Context */
+.quick-future{border-color:#7c9ee6;background:linear-gradient(145deg,#f7faff,#eaf0ff)}
+.future-hero{background:linear-gradient(135deg,#143d83 0%,#315fbf 58%,#6f87dd 100%)}
+.future-horizon{margin:18px 0;display:grid;grid-template-columns:minmax(0,1fr) minmax(320px,.8fr);align-items:center;gap:24px;border:2px solid #b8c9ed;background:linear-gradient(145deg,#fbfdff,#eef3ff)}
+.future-horizon h2{margin:8px 0 9px;font-size:clamp(22px,2.8vw,32px)}
+.future-horizon p{margin:0;color:var(--ink-2);line-height:1.7}
+.future-horizon-meter{display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:10px}
+.future-horizon-meter>div:first-child,.future-horizon-meter>div:last-child{min-width:60px;text-align:center}
+.future-horizon-meter b,.future-horizon-meter small{display:block}.future-horizon-meter b{font-size:24px;color:#214f9f}.future-horizon-meter small{font-size:10px;color:var(--muted);font-weight:800}
+.future-horizon-track{height:20px;border-radius:999px;background:#d9e4f7;position:relative;overflow:hidden;border:1px solid #bed0ec}
+.future-horizon-track i{position:absolute;inset:0 auto 0 0;background:linear-gradient(90deg,#315fbf,#7a8fe2);border-radius:999px}
+.future-horizon-track span{position:absolute;inset:0;display:grid;place-items:center;font-size:10px;font-weight:900;color:#17365f;text-shadow:0 1px #fff}
+.future-area-summary{display:grid;grid-template-columns:repeat(auto-fit,minmax(145px,1fr));gap:9px;margin-bottom:18px}
+.future-area-chip{border:1px solid var(--line);background:#f7f9fc;border-radius:14px;padding:11px 12px;text-align:left;color:var(--ink);display:flex;align-items:center;justify-content:space-between;gap:8px}
+.future-area-chip b{font-size:13px}.future-area-chip span{font-size:11px;color:var(--muted);font-weight:800}.future-area-chip.has-data{border-color:#9db6e5;background:#eef4ff;color:#244f92}
+.future-image-guide{display:flex;align-items:center;justify-content:space-between;gap:16px;border:1px solid #bfccec;background:linear-gradient(145deg,#fff,#f1f5ff);margin-bottom:12px}.future-image-guide h3{margin:0 0 5px}.future-image-guide p{margin:0;color:var(--ink-2);line-height:1.65}.future-image-guide>span{font-size:40px;color:#315fbf}
+.future-image-strip{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:8px;margin:11px 0}
+.future-image-strip a{display:block;border:1px solid #c9d7eb;border-radius:14px;overflow:hidden;background:#f5f8fc;text-decoration:none;color:var(--ink)}
+.future-image-strip img{width:100%;aspect-ratio:16/10;object-fit:cover;display:block;background:#e7eef7}.future-image-strip span{display:block;padding:6px 8px;font-size:11px;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.future-record-list .record{border:1px solid #bdcae7;background:linear-gradient(145deg,#fff,#f7f9ff)}
+.badge.future-area{background:#eaf1ff;color:#285499}.badge.future-status{background:#f1ecff;color:#6b45a2}
+.future-principle,.future-life-teaser{border:2px solid #a9bde7;border-radius:20px;background:linear-gradient(145deg,#f9fbff,#eef3ff);padding:20px;margin:18px 0}
+.future-principle b{font-size:16px}.future-principle p{margin:6px 0 0;line-height:1.7;color:var(--ink-2)}
+.future-life-teaser{display:flex;align-items:center;justify-content:space-between;gap:18px}.future-life-teaser h2{margin:7px 0 5px}.future-life-teaser p{margin:0;color:var(--ink-2)}
+.mindmap-future h3{background:#eaf0ff;color:#294f99}.mindmap-future{border-color:#aabde5}
+.future-empty{padding:28px;border:2px dashed #aebee1;border-radius:20px;background:#f8faff;text-align:center}.future-empty b{font-size:18px}.future-empty p{color:var(--ink-2)}
+
+.universal-context-card{border:2px solid #95b3df;background:linear-gradient(145deg,#fbfdff,#eef5ff)}
+.universal-context-head{display:grid;grid-template-columns:1fr auto;gap:20px;align-items:center}.universal-context-head h2{margin:7px 0}.universal-context-head p{margin:0;color:var(--ink-2);line-height:1.65}
+.universal-brain{width:74px;height:74px;border-radius:22px;background:linear-gradient(145deg,#315fbf,#143d83);color:#fff;display:grid;place-items:center;font-weight:900;font-size:22px;box-shadow:0 10px 25px rgba(31,72,141,.18)}
+.universal-format-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin:16px 0}.universal-format-grid>div{border:1px solid #c5d4e9;background:#fff;border-radius:14px;padding:12px}.universal-format-grid b,.universal-format-grid span{display:block}.universal-format-grid b{color:#244f92}.universal-format-grid span{margin-top:4px;color:var(--ink-2);font-size:12px;line-height:1.5}
+
+@media(max-width:820px){.future-horizon{grid-template-columns:1fr}.future-life-teaser{display:grid}.universal-format-grid{grid-template-columns:1fr}.universal-context-head{grid-template-columns:1fr}.universal-brain{display:none}}
+@media(max-width:560px){.future-horizon-meter{grid-template-columns:48px 1fr 48px}.future-horizon-meter b{font-size:20px}.future-image-strip{grid-template-columns:1fr}.future-area-summary{grid-template-columns:1fr 1fr}.future-life-teaser .btn-row{display:grid;grid-template-columns:1fr}.future-life-teaser .btn{width:100%}}
+.dashboard-future{--dashboard-accent:#5c72c7}

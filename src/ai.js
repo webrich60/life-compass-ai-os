@@ -4,6 +4,7 @@ export function buildContext(state) {
   return {
     profile: state.profile,
     lifeScore: calculateLifeScore(state), scores: state.scores,
+    futureLife: (state.futureVisions || []).filter(x => !x.deletedAt).slice(-60),
     goals: state.goals.filter(x => !x.deletedAt).slice(-20),
     habits: state.habits.filter(x => !x.deletedAt).slice(-20),
     wishes: state.wishes.filter(x => !x.deletedAt).slice(-30),
@@ -32,7 +33,10 @@ export function buildAnalysisRequest(state, question, mode = 'cross') {
       simulationNotPrediction: true,
       avoidOverconfidence: true,
       noSycophancy: true,
-      realityBeforeWishfulThinking: true
+      realityBeforeWishfulThinking: true,
+      idealFutureIsDirectionNotPassFail: true,
+      planningHorizonAge80IsNotLifeExpectancy: true,
+      checkAlignmentWithIdealFuture: true
     }
   };
 }
@@ -57,7 +61,7 @@ export function buildNotebookMarkdown(state) {
   for (const [k,v] of Object.entries(state.profile)) if (v && !['id','updatedAt'].includes(k)) lines.push(`- ${k}: ${v}`);
   lines.push('', '## 人生レーダー');
   for (const d of DOMAINS) lines.push(`- ${d.label}: ${state.scores[d.id] ?? 50}/100`);
-  const sections = [['最優先課題',state.records.filter(x => x.kind === 'priorityIssue')],['目標',state.goals],['習慣',state.habits],['夢・楽しみ（欲しいもの・行きたい場所・やってみたいこと／挑戦／体験）',state.wishes],['健康',state.healthItems],['人生比較',state.comparisons],['人生タイムライン',state.timeline],['商品・事業',state.products],['定期レビュー',state.reviews],['未来シミュレーション',state.simulations],['収入',state.records.filter(x => x.kind === 'incomeRecord' || (x.domain === 'income' && !['expenseRecord','fixedCostRecord','debtRecord'].includes(x.kind)))],['支出',state.records.filter(x => x.kind === 'expenseRecord')],['固定費',state.records.filter(x => x.kind === 'fixedCostRecord')],['負債・借入',state.records.filter(x => x.kind === 'debtRecord')],['記録',state.records.filter(x => x.domain !== 'income' && x.kind !== 'priorityIssue')]];
+  const sections = [['これから作る理想の人生',state.futureVisions || []],['最優先課題',state.records.filter(x => x.kind === 'priorityIssue')],['目標',state.goals],['習慣',state.habits],['夢・楽しみ（欲しいもの・行きたい場所・やってみたいこと／挑戦／体験）',state.wishes],['健康',state.healthItems],['人生比較',state.comparisons],['人生タイムライン',state.timeline],['商品・事業',state.products],['定期レビュー',state.reviews],['未来シミュレーション',state.simulations],['収入',state.records.filter(x => x.kind === 'incomeRecord' || (x.domain === 'income' && !['expenseRecord','fixedCostRecord','debtRecord'].includes(x.kind)))],['支出',state.records.filter(x => x.kind === 'expenseRecord')],['固定費',state.records.filter(x => x.kind === 'fixedCostRecord')],['負債・借入',state.records.filter(x => x.kind === 'debtRecord')],['記録',state.records.filter(x => x.domain !== 'income' && x.kind !== 'priorityIssue')]];
   for (const [label,rows] of sections) {
     lines.push('', `## ${label}`);
     for (const r of rows.filter(x => !x.deletedAt)) {

@@ -13,7 +13,8 @@ const ARRAY_ALIASES = {
   comparisons: ['comparisons', 'lifeComparisons'],
   products: ['products', 'productIdeas'],
   reviews: ['reviews', 'reflections'],
-  simulations: ['simulations']
+  simulations: ['simulations'],
+  futureVisions: ['futureVisions', 'futureLife', 'idealFuture']
 };
 
 const PROFILE_FIELDS = {
@@ -101,7 +102,7 @@ function cleanLegacyRecord(input, target, originalSection, stats) {
     stats.repaired += 1;
     stats.payloadLayersRemoved += recovered.depth;
   }
-  const kind = target === 'wishes' ? 'wish' : target.replace(/s$/, '');
+  const kind = target === 'wishes' ? 'wish' : target === 'futureVisions' ? 'futureVision' : target.replace(/s$/, '');
   const createdAt = isDateTime(row.createdAt) ? row.createdAt : (isDateTime(row.updatedAt) ? row.updatedAt : undefined);
   const updatedAt = isDateTime(row.updatedAt) ? row.updatedAt : createdAt;
   const sourceLink = [row.linkUrl, row.imageUrl, row.createdAt].find(value => typeof value === 'string' && /^https?:\/\//i.test(value)) || '';

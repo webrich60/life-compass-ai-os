@@ -207,7 +207,7 @@ export function mergeScores(local, cloud) {
 export function mergeStates(local, cloud) {
   const l = normalizeState(local), c = normalizeState(cloud);
   const out = normalizeState(c);
-  for (const key of ['records','goals','habits','wishes','healthItems','timeline','comparisons','products','reviews','simulations']) {
+  for (const key of ['records','goals','habits','wishes','healthItems','timeline','comparisons','products','reviews','simulations','futureVisions']) {
     const map = new Map();
     for (const row of [...c[key], ...l[key]]) map.set(row.id, map.has(row.id) ? newer(row, map.get(row.id)) : row);
     out[key] = [...map.values()];
@@ -230,6 +230,13 @@ export function mergeStates(local, cloud) {
         scopes: {
           ...(c.settings.integrations?.gpt?.scopes || {}),
           ...(l.settings.integrations?.gpt?.scopes || {})
+        }
+      },
+      universal: {
+        ...(c.settings.integrations?.universal || {}), ...(l.settings.integrations?.universal || {}),
+        scopes: {
+          ...(c.settings.integrations?.universal?.scopes || {}),
+          ...(l.settings.integrations?.universal?.scopes || {})
         }
       },
       cost: {
@@ -295,5 +302,5 @@ export async function uploadAttachment(state, file) {
   if (!res.ok) throw new Error(`添付の保存に失敗しました（${res.status}）`);
   const json = await res.json();
   if (!json.ok) throw new Error(json.error || '添付を保存できませんでした');
-  return { fileId: json.fileId, name: json.name, url: json.url, mimeType: file.type, size: file.size, uploadedAt: isoNow() };
+  return { fileId: json.fileId, name: json.name, url: json.url, previewUrl: json.previewUrl || json.url, mimeType: file.type, size: file.size, uploadedAt: isoNow() };
 }

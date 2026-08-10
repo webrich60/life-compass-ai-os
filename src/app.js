@@ -1,5 +1,5 @@
 import {
-  DOMAINS, THEORY_OPTIONS, PERSONAS, WISH_TYPES, WISH_AREAS, EXPERIENCE_TYPES, createEmptyState, normalizeRecord,
+  DOMAINS, THEORY_OPTIONS, PERSONAS, WISH_TYPES, WISH_AREAS, EXPERIENCE_TYPES, FUTURE_LIFE_AREAS, FUTURE_LIFE_STATUSES, LIFE_PLANNING_HORIZON_AGE, createEmptyState, normalizeRecord,
   calculateLifeScore, todayTasks, isoNow, localDateKey, activeRows, reviewDue,
   normalizeExternalUrl, normalizeReferenceLinks, MAX_REFERENCE_LINKS
 } from './model.js';
@@ -11,12 +11,12 @@ import { inspectLegacyJson, applyMigration, inspectLegacyJsonBatch, applyMigrati
 import { askAI, buildNotebookMarkdown } from './ai.js';
 import {
   DATA_SCOPE_OPTIONS, buildCloneKnowledgeMarkdown, buildCloneInstructions,
-  buildActionsOpenApiTemplate, estimateGeminiCost
+  buildActionsOpenApiTemplate, buildUniversalAIContextMarkdown, buildUniversalAIContextJson, buildUniversalAIStarterPrompt, estimateGeminiCost
 } from './integrations.js';
 import { findDuplicateCandidates, findDuplicatePairs } from './duplicates.js';
 
 const PAGES = [
-  ['home','⌂','ホーム'], ['priority','!','最優先課題'], ['life','◎','人生設計'], ['calendar','▦','カレンダー'], ['health','♡','健康'],
+  ['home','⌂','ホーム'], ['priority','!','最優先課題'], ['life','◎','人生設計'], ['future','✧','理想の未来'], ['calendar','▦','カレンダー'], ['health','♡','健康'],
   ['work','▣','事業'], ['income','¥','お金'], ['timeline','⌁','タイムライン'], ['reviews','◷','定期レビュー'],
   ['ai','✦','AI伴走'], ['integrations','⌬','AI連携'], ['data','⇄','連携・移行'], ['profile','♙','プロフィール']
 ];
@@ -24,13 +24,13 @@ const EXTRA_PAGES = ['settings','search'];
 const MOBILE = ['home','life','calendar','health','ai'];
 const COLLECTIONS = {
   record:'records', goal:'goals', habit:'habits', healthItem:'healthItems',
-  wish:'wishes', timeline:'timeline', comparison:'comparisons', product:'products', review:'reviews', simulation:'simulations'
+  wish:'wishes', futureVision:'futureVisions', timeline:'timeline', comparison:'comparisons', product:'products', review:'reviews', simulation:'simulations'
 };
 const KIND_LABELS = {
   record:'日々の記録', goal:'目標', habit:'習慣', healthItem:'健康項目', timeline:'人生の出来事',
   wish:'夢・楽しみ', comparison:'人生比較', product:'商品・事業の種', incomeRecord:'収入記録',
   expenseRecord:'支出記録', fixedCostRecord:'固定費', debtRecord:'負債・借入', priorityIssue:'最優先課題',
-  review:'定期レビュー', simulation:'未来シミュレーション'
+  review:'定期レビュー', simulation:'未来シミュレーション', futureVision:'これから作る理想の人生'
 };
 const DETAIL_FIELDS = {
   record:[['mood','気分（任意）','text'],['energy','エネルギー 0〜100','number']],
@@ -52,6 +52,16 @@ const DETAIL_FIELDS = {
     ['priority','優先度','select','高|中|低'],['budget','予算の目安','text'],
     ['wishStatus','実現状況','select','いつか|検討中|計画中|実現済み'],['reason','実現したい理由','textarea'],
     ['firstStep','最初の一歩','textarea'],['companion','一緒に実現したい人（任意）','text']
+  ],
+  futureVision:[
+    ['futureArea','理想の分野','select',FUTURE_LIFE_AREAS.join('|')],
+    ['futureStatus','今の近づき具合','select',FUTURE_LIFE_STATUSES.join('|')],
+    ['targetAge','この状態へ近づきたい年齢（任意）','number'],
+    ['whyImportant','なぜこの人生を望むのか','textarea'],
+    ['currentGap','今とのギャップ・障害','textarea'],
+    ['firstStep','今からできる一歩','textarea'],
+    ['successMeaning','100%達成できなくても「近づいた」と感じる状態','textarea'],
+    ['imagePrompt','理想イメージ画像の生成プロンプト・メモ','textarea']
   ],
   healthItem:[
     ['healthItemType','健康・医療の種類','select','症状・健康管理|治療・手術計画|検査・受診予定|メンタル|その他'],
@@ -100,6 +110,7 @@ DETAIL_LABELS.referenceUrl = '関連URL';
 const AI_QUESTION_PRESETS = {
   common: [
     { id:'reality-first', label:'夢より先に片づける現実課題を確認', question:'最優先課題、目標期限、医療予定、お金、現在の制約を横断し、夢や長期目標を進める前に先に片づけるべき現実課題があるか確認してください。本人の希望に合わせず、放置リスク・期限・生活への影響を基準に順位を付け、今すぐ／すぐに／早めに／考えてから行動の区分も踏まえてください。' },
+    { id:'future-alignment', label:'理想の未来と今の方向性のズレを分析', question:'「これから作る理想の人生」を方向の基準として、目標、欲しいもの、行きたい場所、やりたいこと、健康・医療、お金、最優先課題を横断してください。現在の選択が理想へ近づいている点、方向性がズレている点、理想を100%達成できなくても近づける現実的な代替案を整理してください。80歳は寿命予測ではなく仮の計画時間軸として扱い、年齢・健康・収入などの現実条件も踏まえてください。' },
     { id:'priority', label:'今、一番優先すべきことは？', question:'現在のLife Compass全体を横断し、今いちばん優先すべきことを1つ、その次に優先すべきことを2つまで示してください。理由、放置した場合の影響、今日できる最初の一歩も整理してください。' },
     { id:'balance', label:'健康・メンタル・お金のバランスを分析', question:'健康・医療、メンタル、収入・支出・固定費・負債、目標を横断して、現在の生活バランスを分析してください。負担が重なっている部分、守るべき部分、改善余地を優先順位付きで示してください。' },
     { id:'goals', label:'目標と行動のズレを確認', question:'登録している目標、期限、進捗、習慣、最近の記録を比較し、目標に対して現在の行動が合っている点とズレている点を整理してください。期限が近いものから、次にやる行動を具体化してください。' },
@@ -198,6 +209,7 @@ const PROFILE_LABELS = Object.fromEntries(PROFILE_FIELDS.map(([id,label]) => [id
 const PROFILE_REFERENCE_MAP = {
   healthItem: ['medicalHistory','constraints','supportNeeds'],
   goal: ['values','constraints'],
+  futureVision: ['values','likes','strengths','constraints','family','medicalHistory'],
   habit: ['values','constraints'],
   comparison: ['values','constraints'],
   product: ['strengths','workHistory','values','constraints'],
@@ -208,6 +220,7 @@ const PROFILE_REFERENCE_MAP = {
 const PROFILE_REFERENCE_COPY = {
   healthItem: '既往歴・現在の制約・必要な支援はプロフィールを正本として使います。健康・医療カードには、症状の経過や手術・治療・受診計画など、その項目固有の情報だけを記録します。',
   goal: '価値観と現在の制約はプロフィールから参照します。目標カードには、この目標固有の期限・進捗・行動だけを記録します。',
+  futureVision: '価値観・好きなこと・強み・家族・健康上の制約などはプロフィールを正本として参照します。ここには「これからどんな人生へ向かいたいか」という未来固有の内容だけを書きます。',
   habit: '価値観と現在の制約はプロフィールから参照します。習慣カードには、頻度と続ける基準など、この習慣固有の情報だけを記録します。',
   comparison: '価値観と現在の制約はプロフィールから参照します。ここには過去・現在・新しい理想の差分だけを記録します。',
   product: '強み・実績・仕事歴・価値観・制約はプロフィールから参照します。商品カードには顧客・課題・提供内容・検証など商品固有の情報だけを記録します。',
@@ -672,6 +685,7 @@ function quickActionsHtml(placement = 'desktop') {
   return `<section class="quick-entry quick-entry-${placement}" aria-label="すぐに記録">
     ${sectionHead('すぐに記録','よく使う入力を、ここからすぐに追加できます。')}
     <div class="quick-actions">
+      <button class="quick quick-future" data-action="new-record" data-kind="futureVision"><b>＋ 理想の未来</b><small>健康・住まい・暮らし・収入の方向</small></button>
       <button class="quick quick-priority" data-action="new-record" data-kind="priorityIssue"><b>＋ 最優先課題</b><small>急な問題・重要手続き・トラブル</small></button>
       <button class="quick quick-record" data-action="new-record" data-kind="record"><b>＋ 日々の記録</b><small>気づき・感情・出来事</small></button>
       <button class="quick quick-health" data-action="new-record" data-kind="healthItem"><b>＋ 健康</b><small>症状・通院・測定</small></button>
@@ -702,9 +716,10 @@ function renderHome() {
   const recentRecords = [...activeRows(state.records).filter(row=>row.kind!=='priorityIssue')].sort((a,b)=>new Date(b.updatedAt||b.createdAt||0)-new Date(a.updatedAt||a.createdAt||0)).slice(0,3);
   const topGoals = activeRows(state.goals).filter(row=>row.details?.goalStatus!=='達成済み' && Number(row.details?.progress||0)<100).slice(0,3);
   const profileCount = PROFILE_FIELDS.filter(([key])=>String(state.profile[key]||'').trim()).length;
-  const lifeCount = activeRows(state.goals).length + activeRows(state.habits).length + activeRows(state.wishes).length + activeRows(state.comparisons).length;
+  const lifeCount = activeRows(state.goals).length + activeRows(state.habits).length + activeRows(state.wishes).length + activeRows(state.comparisons).length + activeRows(state.futureVisions || []).length;
   const dashboardCards = [
     {page:'priority',icon:'!',label:'最優先課題',count:priorityRows().length,theme:'priority'},
+    {page:'future',icon:'✧',label:'理想の未来',count:activeRows(state.futureVisions || []).length,theme:'future'},
     {page:'calendar',icon:'▦',label:'カレンダー',count:calendarEvents().filter(event=>event.date.startsWith(localDateKey().slice(0,7))).length,theme:'calendar'},
     {page:'profile',icon:'♙',label:'プロフィール',count:profileCount,theme:'profile'},
     {page:'life',icon:'◎',label:'人生設計',count:lifeCount,theme:'life'},
@@ -724,7 +739,7 @@ function renderHome() {
     <div class="home-dashboard">
       <section class="home-primary">
         <div class="home-hero">
-          <div><span class="home-date">${new Intl.DateTimeFormat('ja-JP',{year:'numeric',month:'long',day:'numeric',weekday:'short',timeZone:'Asia/Tokyo'}).format(new Date())}</span><h2>人生の現在地を、今日の一歩に変える</h2><p>${esc(state.profile.name || '相棒')}さんの記録・目標・健康・仕事を一つにつなぎ、今やることを見つけます。</p><div class="btn-row"><button class="btn" data-page="ai">AIに優先順位を聞く</button><button class="btn secondary" data-action="new-record" data-kind="record">今日を記録</button></div></div>
+          <div><span class="home-date">${new Intl.DateTimeFormat('ja-JP',{year:'numeric',month:'long',day:'numeric',weekday:'short',timeZone:'Asia/Tokyo'}).format(new Date())}</span><h2>人生の現在地を、今日の一歩に変える</h2><p>${esc(state.profile.name || '相棒')}さんの記録・目標・健康・仕事を一つにつなぎ、今やることを見つけます。</p><div class="btn-row"><button class="btn" data-page="ai">AIに優先順位を聞く</button><button class="btn secondary" data-page="future">理想の未来を見る</button></div></div>
           <div class="home-score"><b>${score}</b><span>人生スコア</span></div>
         </div>
         <div class="dashboard-grid">${dashboardCards.map(dashboardCardHtml).join('')}</div>
@@ -770,6 +785,7 @@ function renderLifeMindMap({wantedItems,wantedPlaces,wantedExperiences}) {
   const habits = activeRows(state.habits);
   const comparisons = activeRows(state.comparisons);
   const left = [
+    {label:'理想の未来',icon:'✧',rows:activeRows(state.futureVisions || []),kind:'futureVision',theme:'future'},
     {label:'目標',icon:'⚑',rows:goals,kind:'goal',theme:'goals'},
     {label:'習慣',icon:'↻',rows:habits,kind:'habit',theme:'habits'},
     {label:'理想との比較',icon:'◇',rows:comparisons,kind:'comparison',theme:'comparison'}
@@ -792,12 +808,59 @@ function wishTabsHtml(counts) {
   return `<div class="wish-mobile-tabs" role="tablist" aria-label="夢・楽しみの種類">${tabs.map(([id,label,icon,count])=>`<button class="${wishTab===id?'active':''}" data-wish-tab="${id}" role="tab" aria-selected="${wishTab===id}"><span>${icon}</span><b>${label}</b><small>${count}件</small></button>`).join('')}</div>`;
 }
 
+
+function planningAge() {
+  const birth = String(state.profile?.birthDate || '').trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(birth)) {
+    const today = new Date(`${localDateKey()}T12:00:00+09:00`);
+    const born = new Date(`${birth}T12:00:00+09:00`);
+    let age = today.getFullYear() - born.getFullYear();
+    const beforeBirthday = (today.getMonth() < born.getMonth()) || (today.getMonth() === born.getMonth() && today.getDate() < born.getDate());
+    if (beforeBirthday) age -= 1;
+    if (Number.isFinite(age) && age >= 0) return age;
+  }
+  const age = Number(String(state.profile?.age || '').match(/\d+(?:\.\d+)?/)?.[0] || NaN);
+  return Number.isFinite(age) ? Math.floor(age) : null;
+}
+
+function futureVisionImageHtml(attachments = []) {
+  const images = attachments.filter(file => String(file.mimeType || '').startsWith('image/') && (file.previewUrl || file.url)).slice(0, 3);
+  if (!images.length) return '';
+  return `<div class="future-image-strip">${images.map(file=>`<a href="${esc(file.url)}" target="_blank" rel="noopener noreferrer"><img src="${esc(file.previewUrl || file.url)}" alt="${esc(file.name || '理想の未来イメージ')}" loading="lazy"><span>${esc(file.name || '理想イメージ')}</span></a>`).join('')}</div>`;
+}
+
+function futureHorizonHtml() {
+  const age = planningAge();
+  if (age == null) return `<section class="future-horizon card"><div><span class="badge blue">80歳は計画上の仮の時間軸</span><h2>年齢をプロフィールに入れると、80歳までの時間軸を表示します。</h2><p>80歳は寿命予測ではありません。「残り時間を怖がる」ためではなく、楽しみたいこと・大切なことを先送りしすぎないための目安です。</p></div><button class="btn secondary" data-page="profile">プロフィールを確認</button></section>`;
+  const years = Math.max(0, LIFE_PLANNING_HORIZON_AGE - age);
+  const progress = Math.max(0, Math.min(100, Math.round((age / LIFE_PLANNING_HORIZON_AGE) * 100)));
+  return `<section class="future-horizon card"><div class="future-horizon-copy"><span class="badge blue">80歳は計画上の仮の時間軸</span><h2>${age}歳 → ${LIFE_PLANNING_HORIZON_AGE}歳まで、あと約${years}年。</h2><p>全部を達成できるかではなく、「どちらへ向かいたいか」を明確にし、今の選択を少しずつ理想へ寄せるための指標です。</p></div><div class="future-horizon-meter" aria-label="80歳を仮の計画地点とした現在位置"><div><b>${age}</b><small>現在年齢</small></div><div class="future-horizon-track"><i style="width:${progress}%"></i><span>${progress}%地点</span></div><div><b>${LIFE_PLANNING_HORIZON_AGE}</b><small>仮の計画地点</small></div></div></section>`;
+}
+
+function futureAreaSummaryHtml(rows) {
+  return `<div class="future-area-summary">${FUTURE_LIFE_AREAS.map(area=>{const count=rows.filter(row=>row.details?.futureArea===area).length;return `<div class="future-area-chip ${count?'has-data':''}"><b>${esc(area)}</b><span>${count}件</span></div>`}).join('')}</div>`;
+}
+
+function renderFuture() {
+  const rows = activeRows(state.futureVisions || []);
+  const grouped = FUTURE_LIFE_AREAS.map(area => [area, rows.filter(row => (row.details?.futureArea || 'その他') === area)]).filter(([,items]) => items.length);
+  return `<div class="page-enter future-page">
+    <div class="hero future-hero"><div class="hero-grid"><div><span class="badge blue">NORTH STAR</span><h2>過去の理想ではなく、これから作る理想の人生。</h2><p>健康・収入・家族・住宅・ライフスタイルなどを「到達できるか」だけでなく、これから向かいたい方角として残します。AIはここを基準に、目標や欲しいもの、行きたい場所とのズレも分析します。</p><div class="btn-row"><button class="btn" data-action="new-record" data-kind="futureVision">＋ 理想の未来カード</button><button class="btn secondary" data-page="ai">AIに方向性を分析してもらう</button></div></div><div class="life-score">✧<small>FUTURE</small></div></div></div>
+    ${futureHorizonHtml()}
+    ${sectionHead('理想の人生を分野別に描く','100%達成できなくても、少し近づけば成功と考えるための基準を作ります。')}
+    ${futureAreaSummaryHtml(rows)}
+    <section class="card future-image-guide"><div><h3>画像でも理想を残せます</h3><p>ChatGPTなどの画像生成AIで「理想の家・暮らし・旅・働き方」のイメージを作り、カードの「理想イメージ画像／添付」から登録できます。画像生成用の文章はカード内の「理想イメージ画像の生成プロンプト・メモ」に保存できます。</p></div><span>▧</span></section>
+    ${rows.length ? grouped.map(([area,items])=>`${sectionHead(area,`${items.length}件の理想の未来`)}<div class="record-list future-record-list">${items.map(row=>recordCard(row,'futureVision')).join('')}</div>`).join('') : '<div class="empty future-empty"><b>まだ理想の未来カードがありません。</b><p>健康・収入・家族・住宅・ライフスタイルなどから、まず1枚だけ書いてみてください。</p><button class="btn" data-action="new-record" data-kind="futureVision">最初のカードを作る</button></div>'}
+    <section class="future-principle"><b>このページの考え方</b><p>80歳は寿命の予測ではありません。完全達成の合否でもありません。今より少しでも理想の方向へ近づき、人生を楽しむ選択を増やすための「方角」です。</p></section>
+  </div>`;
+}
+
 function renderLife() {
   const wantedItems = activeRows(state.wishes).filter(row => (row.details?.wishType || '欲しいもの') === '欲しいもの');
   const wantedPlaces = activeRows(state.wishes).filter(row => row.details?.wishType === '行きたい場所');
   const wantedExperiences = activeRows(state.wishes).filter(row => row.details?.wishType === 'やってみたいこと・挑戦・体験');
   const lifeData = {wantedItems,wantedPlaces,wantedExperiences};
-  const cards = `${sectionHead('理想との比較','過去の理想 → 現在 → 新しい理想を専用項目で整理','<button class="btn secondary" data-action="new-record" data-kind="comparison">＋ 比較を追加</button>')}${recordList(state.comparisons,'comparison')}
+  const cards = `<section class="future-life-teaser"><div><span class="badge blue">これからの方向</span><h2>これから作る理想の人生</h2><p>健康・収入・家族・住宅・ライフスタイルを、80歳を仮の時間軸にして描きます。</p></div><div class="btn-row"><button class="btn" data-page="future">理想の未来を見る</button><button class="btn secondary" data-action="new-record" data-kind="futureVision">＋ カードを追加</button></div></section>${sectionHead('理想との比較','過去の理想 → 現在 → 新しい理想を専用項目で整理','<button class="btn secondary" data-action="new-record" data-kind="comparison">＋ 比較を追加</button>')}${recordList(state.comparisons,'comparison')}
   ${sectionHead('目標と習慣','期限・進捗・頻度に加え、習慣は食事・運動など種類別に管理','<div class="btn-row"><button class="btn secondary" data-action="new-record" data-kind="goal">＋ 目標</button><button class="btn secondary" data-action="new-record" data-kind="habit">＋ 習慣</button></div>')}
   ${goalDeadlineAlertsHtml(state.goals)}
   <div class="grid grid-2"><div class="card"><h3>目標</h3>${duplicateSummaryHtml(state.goals,'goal')}${activeRows(state.goals).map(taskHtml).join('')||'<div class="empty">目標はまだありません</div>'}</div><div class="card"><h3>習慣</h3>${duplicateSummaryHtml(state.habits,'habit')}${activeRows(state.habits).map(taskHtml).join('')||'<div class="empty">習慣はまだありません</div>'}</div></div>
@@ -945,11 +1008,13 @@ function renderProfile() {
 function renderData() {
   const synced = Boolean(state.meta.lastSyncedAt);
   const trash = allRows({deleted:true});
-  const counts = [['最優先課題',state.records.filter(row=>row.kind==='priorityIssue')],['記録',state.records.filter(row=>row.kind!=='priorityIssue')],['目標',state.goals],['習慣',state.habits],['夢・楽しみ',state.wishes],['健康',state.healthItems],['タイムライン',state.timeline],['人生比較',state.comparisons],['商品',state.products],['レビュー',state.reviews],['シミュレーション',state.simulations]];
+  const counts = [['最優先課題',state.records.filter(row=>row.kind==='priorityIssue')],['記録',state.records.filter(row=>row.kind!=='priorityIssue')],['目標',state.goals],['習慣',state.habits],['夢・楽しみ',state.wishes],['理想の未来',state.futureVisions],['健康',state.healthItems],['タイムライン',state.timeline],['人生比較',state.comparisons],['商品',state.products],['レビュー',state.reviews],['シミュレーション',state.simulations]];
   return `<div class="page-enter"><div class="grid grid-2"><section class="card"><h2>クラウド同期</h2><div class="status-panel"><span class="status-dot ${synced?'ok':'warn'}"></span><div><b>${synced?'同期済み':'初回同期前'}</b><small style="display:block;color:var(--muted)">${synced?new Date(state.meta.lastSyncedAt).toLocaleString('ja-JP'):'設定で接続情報を登録してください'}</small></div></div><p>Google Sheetsを正本として、プロフィールも点数も項目単位で安全に統合します。</p><div class="btn-row"><button class="btn" data-action="sync">今すぐ同期</button><button class="btn ghost" data-action="test-connection">接続テスト</button></div></section>
   <section class="card"><h2>JSONバックアップ</h2><p>全データを手元に保存します。復元や端末移行に使えます。</p><div class="btn-row"><button class="btn secondary" data-action="export-json">JSONを書き出す</button><button class="btn ghost" data-action="import-json">旧JSONを比較・統合</button></div></section></div>
   ${sectionHead('NotebookLM連携','Google Sheets内にNotebookLM専用の読み取りやすい分析タブを自動生成')}
-  <section class="card notebooklm-card"><div class="notebooklm-head"><div><span class="badge blue">NOTEBOOKLM READY</span><h2>人生データをNotebookLM向けに整理</h2><p>最初にクラウド同期し、その正本からプロフィール・最優先課題・健康／医療・収入／支出／固定費／負債・目標／習慣・夢・事業・タイムライン・レビューを専用タブへ再構成します。同じ情報をもう一度入力する必要はありません。</p></div><div class="notebooklm-icon">N</div></div><div class="notebooklm-steps"><div><b>1</b><span>Life Compassを同期</span></div><div><b>2</b><span>NotebookLM用タブを更新</span></div><div><b>3</b><span>同じGoogleスプレッドシートをNotebookLMのソースに追加</span></div></div><div class="btn-row"><button class="btn" data-action="refresh-notebooklm">NotebookLM用シートを更新</button><button class="btn ghost" data-action="export-notebook">Markdownでも書き出す</button></div><p class="fine-print">更新すると NLM_00_Overview ～ NLM_10_All_Index を再生成します。Life Compassの正本シートは削除・変更しません。健康・医療・収入・支出・負債などセンシティブな情報を含むため、NotebookLM側の共有範囲には注意してください。</p></section>
+  <section class="card notebooklm-card"><div class="notebooklm-head"><div><span class="badge blue">NOTEBOOKLM READY</span><h2>人生データをNotebookLM向けに整理</h2><p>最初にクラウド同期し、その正本からプロフィール・これから作る理想の人生・最優先課題・健康／医療・収入／支出／固定費／負債・目標／習慣・夢・事業・タイムライン・レビューを専用タブへ再構成します。同じ情報をもう一度入力する必要はありません。</p></div><div class="notebooklm-icon">N</div></div><div class="notebooklm-steps"><div><b>1</b><span>Life Compassを同期</span></div><div><b>2</b><span>NotebookLM用タブを更新</span></div><div><b>3</b><span>同じGoogleスプレッドシートをNotebookLMのソースに追加</span></div></div><div class="btn-row"><button class="btn" data-action="refresh-notebooklm">NotebookLM用シートを更新</button><button class="btn ghost" data-action="export-notebook">Markdownでも書き出す</button></div><p class="fine-print">更新すると NLM_00_Overview ～ NLM_11_Future_Life を再生成します。Life Compassの正本シートは削除・変更しません。健康・医療・収入・支出・負債などセンシティブな情報を含むため、NotebookLM側の共有範囲には注意してください。</p></section>
+  ${sectionHead('Universal AI Context Pack','Life Compassをメインの頭脳として、ChatGPT・Gemini・Claudeなど他のAIへ同じ背景を渡す')}
+  <section class="card universal-context-card"><div class="universal-context-head"><div><span class="badge blue">PORTABLE CONTEXT</span><h2>あらゆるAIへ持ち運べる「自分の文脈」を作る</h2><p>理想の未来・現在の現実・最優先課題・健康・お金・目標などを、AIが読みやすい共通コンテキストへ変換します。Life Compassを正本にし、必要な範囲だけ選んで書き出せます。</p></div><div class="universal-brain">LC</div></div><h4>外部AIへ渡してよいデータ</h4>${scopeGrid('universal')}<div class="universal-format-grid"><div><b>Markdown</b><span>AIへファイル添付しやすい。通常はこちらを推奨。</span></div><div><b>JSON</b><span>構造化データを扱えるAI・開発ツール向け。</span></div><div><b>開始プロンプト</b><span>新しいAIチャットの最初に貼り付ける共通指示。</span></div></div><div class="btn-row"><button class="btn" data-action="export-universal-md">AI Context（Markdown）</button><button class="btn secondary" data-action="export-universal-json">AI Context（JSON）</button><button class="btn ghost" data-action="export-universal-prompt">開始プロンプト</button><button class="btn ghost" data-action="save-universal-scopes">選択範囲を保存</button></div><p class="fine-print">この書き出しにAPIキー・同期トークンは含めません。健康・家族・住所・金銭などをONにした場合は、アップロード先AIの共有・保存設定を確認してください。</p></section>
   ${sectionHead('その他の外部連携','同じ人生データを目的別に再利用')}
   <div class="quick-actions"><button class="quick" data-page="integrations"><b>LINE・相棒専用GPT</b><small>AI連携センターを開く</small></button><button class="quick" data-action="export-story"><b>Story Studio</b><small>人生資産を書き出す</small></button><button class="quick" data-action="export-product"><b>商品設計</b><small>経験を商品へ送る</small></button><button class="quick" data-action="export-kotka"><b>KOTKA AI経営OS</b><small>事業データを書き出す</small></button></div>
   ${sectionHead('データ内訳','現在この端末にある有効データ')}<div class="grid grid-3">${counts.map(([label,rows])=>`<div class="card metric-card"><span class="metric-icon">${activeRows(rows).length}</span><div><small>登録件数</small><b>${label}</b></div></div>`).join('')}</div>
@@ -1040,7 +1105,7 @@ function renderSearch() {
   return `<div class="page-enter"><div class="search-box"><input id="globalSearch" type="search" placeholder="記録・健康・目標・夢・行きたい場所・挑戦・体験などを検索" autocomplete="off"></div><div class="filter-row"><button class="filter-chip active" data-search-kind="all">すべて</button>${Object.entries(KIND_LABELS).map(([kind,label])=>`<button class="filter-chip" data-search-kind="${kind}">${label}</button>`).join('')}</div>${sectionHead('検索結果','入力すると全データから探します。')}<div id="searchResults" class="record-list"><div class="empty">検索語を入力してください</div></div></div>`;
 }
 
-const DUPLICATE_CHECK_KINDS = new Set(['priorityIssue','goal','habit','wish','healthItem','timeline','comparison','product','fixedCostRecord','debtRecord']);
+const DUPLICATE_CHECK_KINDS = new Set(['priorityIssue','goal','habit','wish','futureVision','healthItem','timeline','comparison','product','fixedCostRecord','debtRecord']);
 const duplicateCheckEnabled = kind => DUPLICATE_CHECK_KINDS.has(kind);
 
 function duplicateSummaryHtml(rows, kind) {
@@ -1100,12 +1165,12 @@ function recordCard(row, fallbackKind) {
   const primaryMoney = kind === 'debtRecord' ? moneyNumber(row.details?.remainingBalance || row.details?.originalAmount) : moneyNumber(row.details?.amount);
   const incomeAmountHtml = financeCard && primaryMoney > 0 ? `<strong class="income-card-amount">${incomeYen(primaryMoney)}${kind==='debtRecord'?'<small> 現在残高</small>':''}</strong>` : '';
   const completionButton = completion.eligible ? `<button class="btn small ${completed?'ghost':'completion-action'}" data-action="toggle-completion" data-kind="${esc(kind)}" data-id="${esc(row.id)}">${esc(completion.button)}</button>` : '';
-  return `<article class="record ${wishClass} ${financeCard?'income-record':''} ${priorityCard?`priority-record ${(PRIORITY_META[row.details?.issuePriority]||PRIORITY_META['早めに']).className}`:''} ${completed?'completed':''} ${deadline?.className||''}">${completed?`<span class="completion-ribbon">✓ ${esc(completion.ribbon)}</span>`:''}<span class="record-date">${displayDate(row.date)}</span><div><span class="badge">${esc(financeCard?'お金':domainLabel(row.domain))}</span><h3>${esc(row.title)}</h3>${priorityCard?priorityBadgeHtml(row):''}${incomeAmountHtml}<p>${esc(row.body)}</p>${progress!==null?`<div class="progress" title="進捗 ${progress}%"><i style="width:${Math.max(0,Math.min(100,progress))}%"></i></div>`:''}<div class="record-meta">${deadline?`<span class="deadline-badge ${deadline.className}">⚠ ${esc(deadline.label)}・期限 ${displayDate(row.details.dueDate)}</span>`:''}${row.details?.incomeType?`<span class="badge income-type-tag">${esc(row.details.incomeType)}</span>`:''}${row.details?.sourceName?`<span class="badge">収入元 ${esc(row.details.sourceName)}</span>`:''}${row.details?.incomePeriod?`<span class="badge">${esc(row.details.incomePeriod)}</span>`:''}${row.details?.incomeStatus?`<span class="badge ${row.details.incomeStatus==='見込'?'warn':row.details.incomeStatus==='確定'?'completion':''}">${esc(row.details.incomeStatus)}</span>`:''}${row.details?.amountKind?`<span class="badge">${esc(row.details.amountKind)}</span>`:''}${row.details?.expenseType?`<span class="badge expense-type-tag">${esc(row.details.expenseType)}</span>`:''}${row.details?.expensePeriod?`<span class="badge">${esc(row.details.expensePeriod)}</span>`:''}${row.details?.expenseStatus?`<span class="badge ${row.details.expenseStatus==='予定'?'warn':''}">${esc(row.details.expenseStatus)}</span>`:''}${row.details?.fixedCostType?`<span class="badge fixed-type-tag">${esc(row.details.fixedCostType)}</span>`:''}${row.details?.fixedCostFrequency?`<span class="badge">${esc(row.details.fixedCostFrequency)}</span>`:''}${row.details?.fixedCostStatus?`<span class="badge ${row.details.fixedCostStatus==='見直し候補'?'warn':''}">${esc(row.details.fixedCostStatus)}</span>`:''}${row.details?.debtType?`<span class="badge debt-type-tag">${esc(row.details.debtType)}</span>`:''}${row.details?.lenderName?`<span class="badge">借入先 ${esc(row.details.lenderName)}</span>`:''}${row.details?.monthlyPayment?`<span class="badge">毎月返済 ${incomeYen(moneyNumber(row.details.monthlyPayment))}</span>`:''}${row.details?.debtStatus?`<span class="badge ${row.details.debtStatus==='完済'?'completion':row.details.debtStatus==='返済猶予'?'warn':''}">${esc(row.details.debtStatus)}</span>`:''}${row.details?.issueCategory?`<span class="badge">${esc(row.details.issueCategory)}</span>`:''}${row.details?.issueStatus?`<span class="badge ${row.details.issueStatus==='解決済み'?'completion':row.details.issueStatus==='待ち'?'warn':''}">${esc(row.details.issueStatus)}</span>`:''}${priorityCard&&row.details?.dueDate?`<span class="deadline-badge ${(priorityDeadlineInfo(row)||{}).className||''}">期限 ${displayDate(row.details.dueDate)}${priorityDeadlineInfo(row)?` ・ ${esc(priorityDeadlineInfo(row).label)}`:''}</span>`:''}${row.details?.wishType?`<span class="badge wish-type-tag ${wishClass}">${esc(row.details.wishType)}</span>`:''}${row.details?.wishArea?`<span class="badge wish-area-tag wish-area-${wishAreaClass(row.details.wishArea)}">${esc(row.details.wishArea)}</span>`:''}${row.details?.experienceType?`<span class="badge">${esc(row.details.experienceType)}</span>`:''}${kind==='healthItem'?`<span class="badge health-type-tag">${esc(healthItemType(row))}</span>`:''}${row.details?.medicalStatus?`<span class="badge ${row.details.medicalStatus==='完了'?'completion':row.details.medicalStatus==='実施予定'?'warn':''}">${esc(row.details.medicalStatus)}</span>`:''}${row.details?.facilityWishId&&relatedMedicalPlaceName(row.details.facilityWishId)?`<span class="badge medical-facility">医療機関 ${esc(relatedMedicalPlaceName(row.details.facilityWishId))}</span>`:''}${impactBadge('身体',row.details?.physicalImpact)}${impactBadge('メンタル',row.details?.mentalImpact)}${impactBadge('収入',row.details?.incomeImpact)}${row.details?.wishStatus?`<span class="badge ${row.details.wishStatus==='実現済み'?'completion':''}">${esc(row.details.wishStatus)}</span>`:''}${row.details?.goalStatus?`<span class="badge ${row.details.goalStatus==='達成済み'?'completion':''}">${esc(row.details.goalStatus)}</span>`:''}${row.details?.priority?`<span class="badge ${row.details.priority==='高'?'warn':''}">優先度 ${esc(row.details.priority)}</span>`:''}${row.details?.frequency?`<span class="badge">${esc(row.details.frequency)}</span>`:''}${row.details?.budget?`<span class="badge">予算 ${esc(row.details.budget)}</span>`:''}</div>${referenceLinksHtml(row.details,true)}${attachments.map(file=>`<a class="attachment-link" href="${esc(file.url)}" target="_blank" rel="noopener noreferrer">添付：${esc(file.name)}</a>`).join('')}</div><div class="record-actions">${completionButton}<button class="btn small ghost" data-action="view-record" data-kind="${esc(kind)}" data-id="${esc(row.id)}">見る</button><button class="btn small ghost" data-action="edit-record" data-kind="${esc(kind)}" data-id="${esc(row.id)}">編集</button><button class="btn small danger" data-action="delete-record" data-kind="${esc(kind)}" data-id="${esc(row.id)}">削除</button></div></article>`;
+  return `<article class="record ${wishClass} ${financeCard?'income-record':''} ${priorityCard?`priority-record ${(PRIORITY_META[row.details?.issuePriority]||PRIORITY_META['早めに']).className}`:''} ${completed?'completed':''} ${deadline?.className||''}">${completed?`<span class="completion-ribbon">✓ ${esc(completion.ribbon)}</span>`:''}<span class="record-date">${displayDate(row.date)}</span><div><span class="badge">${esc(financeCard?'お金':domainLabel(row.domain))}</span><h3>${esc(row.title)}</h3>${priorityCard?priorityBadgeHtml(row):''}${incomeAmountHtml}<p>${esc(row.body)}</p>${progress!==null?`<div class="progress" title="進捗 ${progress}%"><i style="width:${Math.max(0,Math.min(100,progress))}%"></i></div>`:''}<div class="record-meta">${deadline?`<span class="deadline-badge ${deadline.className}">⚠ ${esc(deadline.label)}・期限 ${displayDate(row.details.dueDate)}</span>`:''}${row.details?.incomeType?`<span class="badge income-type-tag">${esc(row.details.incomeType)}</span>`:''}${row.details?.sourceName?`<span class="badge">収入元 ${esc(row.details.sourceName)}</span>`:''}${row.details?.incomePeriod?`<span class="badge">${esc(row.details.incomePeriod)}</span>`:''}${row.details?.incomeStatus?`<span class="badge ${row.details.incomeStatus==='見込'?'warn':row.details.incomeStatus==='確定'?'completion':''}">${esc(row.details.incomeStatus)}</span>`:''}${row.details?.amountKind?`<span class="badge">${esc(row.details.amountKind)}</span>`:''}${row.details?.expenseType?`<span class="badge expense-type-tag">${esc(row.details.expenseType)}</span>`:''}${row.details?.expensePeriod?`<span class="badge">${esc(row.details.expensePeriod)}</span>`:''}${row.details?.expenseStatus?`<span class="badge ${row.details.expenseStatus==='予定'?'warn':''}">${esc(row.details.expenseStatus)}</span>`:''}${row.details?.fixedCostType?`<span class="badge fixed-type-tag">${esc(row.details.fixedCostType)}</span>`:''}${row.details?.fixedCostFrequency?`<span class="badge">${esc(row.details.fixedCostFrequency)}</span>`:''}${row.details?.fixedCostStatus?`<span class="badge ${row.details.fixedCostStatus==='見直し候補'?'warn':''}">${esc(row.details.fixedCostStatus)}</span>`:''}${row.details?.debtType?`<span class="badge debt-type-tag">${esc(row.details.debtType)}</span>`:''}${row.details?.lenderName?`<span class="badge">借入先 ${esc(row.details.lenderName)}</span>`:''}${row.details?.monthlyPayment?`<span class="badge">毎月返済 ${incomeYen(moneyNumber(row.details.monthlyPayment))}</span>`:''}${row.details?.debtStatus?`<span class="badge ${row.details.debtStatus==='完済'?'completion':row.details.debtStatus==='返済猶予'?'warn':''}">${esc(row.details.debtStatus)}</span>`:''}${row.details?.issueCategory?`<span class="badge">${esc(row.details.issueCategory)}</span>`:''}${row.details?.issueStatus?`<span class="badge ${row.details.issueStatus==='解決済み'?'completion':row.details.issueStatus==='待ち'?'warn':''}">${esc(row.details.issueStatus)}</span>`:''}${priorityCard&&row.details?.dueDate?`<span class="deadline-badge ${(priorityDeadlineInfo(row)||{}).className||''}">期限 ${displayDate(row.details.dueDate)}${priorityDeadlineInfo(row)?` ・ ${esc(priorityDeadlineInfo(row).label)}`:''}</span>`:''}${row.details?.wishType?`<span class="badge wish-type-tag ${wishClass}">${esc(row.details.wishType)}</span>`:''}${row.details?.wishArea?`<span class="badge wish-area-tag wish-area-${wishAreaClass(row.details.wishArea)}">${esc(row.details.wishArea)}</span>`:''}${row.details?.experienceType?`<span class="badge">${esc(row.details.experienceType)}</span>`:''}${kind==='healthItem'?`<span class="badge health-type-tag">${esc(healthItemType(row))}</span>`:''}${row.details?.medicalStatus?`<span class="badge ${row.details.medicalStatus==='完了'?'completion':row.details.medicalStatus==='実施予定'?'warn':''}">${esc(row.details.medicalStatus)}</span>`:''}${row.details?.facilityWishId&&relatedMedicalPlaceName(row.details.facilityWishId)?`<span class="badge medical-facility">医療機関 ${esc(relatedMedicalPlaceName(row.details.facilityWishId))}</span>`:''}${impactBadge('身体',row.details?.physicalImpact)}${impactBadge('メンタル',row.details?.mentalImpact)}${impactBadge('収入',row.details?.incomeImpact)}${row.details?.wishStatus?`<span class="badge ${row.details.wishStatus==='実現済み'?'completion':''}">${esc(row.details.wishStatus)}</span>`:''}${row.details?.goalStatus?`<span class="badge ${row.details.goalStatus==='達成済み'?'completion':''}">${esc(row.details.goalStatus)}</span>`:''}${row.details?.priority?`<span class="badge ${row.details.priority==='高'?'warn':''}">優先度 ${esc(row.details.priority)}</span>`:''}${row.details?.frequency?`<span class="badge">${esc(row.details.frequency)}</span>`:''}${row.details?.budget?`<span class="badge">予算 ${esc(row.details.budget)}</span>`:''}${kind==='futureVision'&&row.details?.futureArea?`<span class="badge future-area">${esc(row.details.futureArea)}</span>`:''}${kind==='futureVision'&&row.details?.futureStatus?`<span class="badge future-status">${esc(row.details.futureStatus)}</span>`:''}${kind==='futureVision'&&row.details?.targetAge?`<span class="badge">目安 ${esc(row.details.targetAge)}歳</span>`:''}</div>${kind==='futureVision'?futureVisionImageHtml(attachments):''}${referenceLinksHtml(row.details,true)}${attachments.filter(file=>kind!=='futureVision'||!String(file.mimeType||'').startsWith('image/')).map(file=>`<a class="attachment-link" href="${esc(file.url)}" target="_blank" rel="noopener noreferrer">添付：${esc(file.name)}</a>`).join('')}</div><div class="record-actions">${completionButton}<button class="btn small ghost" data-action="view-record" data-kind="${esc(kind)}" data-id="${esc(row.id)}">見る</button><button class="btn small ghost" data-action="edit-record" data-kind="${esc(kind)}" data-id="${esc(row.id)}">編集</button><button class="btn small danger" data-action="delete-record" data-kind="${esc(kind)}" data-id="${esc(row.id)}">削除</button></div></article>`;
 }
 
 function render() {
   updateChrome();
-  const views = {home:renderHome,priority:renderPriority,life:renderLife,calendar:renderCalendar,health:renderHealth,work:renderWork,income:renderIncome,timeline:renderTimeline,reviews:renderReviews,ai:renderAI,integrations:renderIntegrations,data:renderData,profile:renderProfile,settings:renderSettings,search:renderSearch};
+  const views = {home:renderHome,priority:renderPriority,life:renderLife,future:renderFuture,calendar:renderCalendar,health:renderHealth,work:renderWork,income:renderIncome,timeline:renderTimeline,reviews:renderReviews,ai:renderAI,integrations:renderIntegrations,data:renderData,profile:renderProfile,settings:renderSettings,search:renderSearch};
   $('#app').innerHTML = (views[page] || renderHome)();
   bindPage();
 }
@@ -1189,7 +1254,7 @@ function detailFieldHtml(kind, details = {}) {
       const places = medicalPlaceWishes();
       return `<div class="field" data-detail-field="${esc(key)}"><label>${label}</label><select name="detail__${key}"><option value="">選択しない</option>${places.map(place=>`<option value="${esc(place.id)}" ${String(value)===place.id?'selected':''}>${esc(place.title)}</option>`).join('')}</select><span class="hint">「人生設計 → 行きたい場所」で分野を「医療」にした病院・クリニックから選べます。</span></div>`;
     }
-    const numberLimits = type === 'number' ? (['energy','progress'].includes(key) ? 'min="0" max="100"' : key === 'interestRate' ? 'min="0" step="0.01"' : 'min="0" step="1"') : '';
+    const numberLimits = type === 'number' ? (['energy','progress'].includes(key) ? 'min="0" max="100"' : key === 'targetAge' ? `min="0" max="${LIFE_PLANNING_HORIZON_AGE}" step="1"` : key === 'interestRate' ? 'min="0" step="0.01"' : 'min="0" step="1"') : '';
     return `<div class="field" data-detail-field="${esc(key)}"><label>${label}</label><input name="detail__${key}" type="${type}" value="${esc(value)}" ${numberLimits}></div>`;
   }).join('');
 }
@@ -1200,7 +1265,8 @@ function openRecordDialog(kind, id = '', preset = {}) {
   const existing = id ? state[key].find(row => row.id === id) : null;
   const seedDetails = existing?.details || preset.details || {};
   const dialog = $('#recordDialog');
-  const titlePlaceholder = kind === 'priorityIssue' ? '例：期限のある手続き、急な修理、家族の重要対応'
+  const titlePlaceholder = kind === 'futureVision' ? '例：健康で自由に旅を楽しむ暮らし、静かな平屋で家族と暮らす'
+    : kind === 'priorityIssue' ? '例：期限のある手続き、急な修理、家族の重要対応'
     : kind === 'wish' ? '例：キャンピングカー、北海道旅行、Kindle出版'
     : kind === 'incomeRecord' ? '例：給与、傷病手当、副業売上、年金'
     : kind === 'expenseRecord' ? '例：眼科の治療費、車検、家電購入、国民健康保険'
@@ -1209,26 +1275,28 @@ function openRecordDialog(kind, id = '', preset = {}) {
     : kind === 'habit' ? '例：朝食を食べる、30分歩く、23時までに寝る'
     : kind === 'healthItem' ? '例：左目の状態、角膜手術の計画、大学病院への受診'
     : '例：朝の血圧、今月の目標、事業アイデア';
-  const bodyPlaceholder = kind === 'priorityIssue' ? '何が起きたか、なぜ今対応が必要かを事実ベースで書いてください'
+  const bodyPlaceholder = kind === 'futureVision' ? 'これから作り上げたい理想の状態を、できるだけ具体的に書いてください。完全達成できるかではなく、向かいたい方向を言葉にします。'
+    : kind === 'priorityIssue' ? '何が起きたか、なぜ今対応が必要かを事実ベースで書いてください'
     : kind === 'wish' ? '欲しいもの・場所・挑戦・体験と、叶えたいイメージを自由に書いてください'
     : kind === 'incomeRecord' ? '入金条件・期間・変動理由など、必要な補足だけを書いてください'
     : kind === 'expenseRecord' ? '何のための支出か、今後も発生するかなど必要な補足を書いてください'
     : kind === 'fixedCostRecord' ? '契約内容、見直したい点、解約条件など必要な補足を書いてください'
     : kind === 'debtRecord' ? '借入の背景、返済上の注意点、契約メモなどを書いてください'
     : '事実や気づきを自由に書いてください';
-  const urlLabel = kind === 'priorityIssue' ? '関連URL（手続き・連絡先・参考資料など）'
+  const urlLabel = kind === 'futureVision' ? '参考URL（理想の家・暮らし・場所・サービスなど）'
+    : kind === 'priorityIssue' ? '関連URL（手続き・連絡先・参考資料など）'
     : kind === 'wish' ? '関連URL（商品・場所・体験のページ）'
     : FINANCE_RECORD_KINDS.has(kind) ? '関連URL（明細・契約・制度・サービスのページ）'
     : '関連URL（参考ページ・地図・予約ページなど）';
-  const titleLabel = kind === 'priorityIssue' ? '最優先課題名' : kind === 'incomeRecord' ? '収入名' : kind === 'expenseRecord' ? '支出名' : kind === 'fixedCostRecord' ? '固定費名' : kind === 'debtRecord' ? '負債・借入名' : 'タイトル';
-  const bodyLabel = kind === 'priorityIssue' ? '発生したこと・状況' : FINANCE_RECORD_KINDS.has(kind) ? '補足・メモ' : '概要・自由メモ';
+  const titleLabel = kind === 'futureVision' ? '理想の未来カード名' : kind === 'priorityIssue' ? '最優先課題名' : kind === 'incomeRecord' ? '収入名' : kind === 'expenseRecord' ? '支出名' : kind === 'fixedCostRecord' ? '固定費名' : kind === 'debtRecord' ? '負債・借入名' : 'タイトル';
+  const bodyLabel = kind === 'futureVision' ? 'これから作りたい理想の状態' : kind === 'priorityIssue' ? '発生したこと・状況' : FINANCE_RECORD_KINDS.has(kind) ? '補足・メモ' : '概要・自由メモ';
   const selectedDomain = existing?.domain || preset.domain || defaultDomain(kind);
   const domainField = FINANCE_RECORD_KINDS.has(kind)
     ? '<div class="field"><label>分野</label><div class="locked-field">お金</div><input name="domain" type="hidden" value="income"></div>'
     : `<div class="field"><label>関連する分野</label><select name="domain">${DOMAINS.map(domain=>`<option value="${domain.id}" ${selectedDomain===domain.id?'selected':''}>${domain.label}</option>`).join('')}</select></div>`;
   const existingLinks = normalizeReferenceLinks(existing?.details || {});
   const editorLinks = existingLinks.length ? existingLinks : (preset.referenceLinks?.length ? preset.referenceLinks : [{}]);
-  dialog.innerHTML = `<form id="recordForm"><div class="modal-head"><div><span class="badge">${existing?'編集':'新規'}</span><h2>${esc(KIND_LABELS[kind])}</h2></div><button class="icon-btn" type="button" data-close>×</button></div><div class="modal-body form-grid"><input type="hidden" name="kind" value="${kind}"><div class="field"><label>日付</label><input name="date" type="date" value="${esc(existing?.date || preset.date || localDateKey())}" required></div>${domainField}<div class="field full"><label>${titleLabel}</label><input name="title" value="${esc(existing?.title || preset.title || '')}" required placeholder="${titlePlaceholder}"></div><div class="field full"><label>${bodyLabel}</label><textarea name="body" placeholder="${bodyPlaceholder}">${esc(existing?.body || preset.body || '')}</textarea></div>${profileReferenceHtml(kind,{context:'editor'})}${detailFieldHtml(kind,seedDetails)}<div class="field full reference-links-field"><label>${urlLabel}（最大${MAX_REFERENCE_LINKS}件）</label><div id="referenceLinkRows" class="reference-link-editor">${editorLinks.map(referenceLinkEditorRow).join('')}</div><button class="btn small secondary add-reference" type="button" data-add-reference>＋ リンクを追加</button><span class="hint">公式サイト・SNS・YouTube・地図・予約／購入ページなど。名前は自由、https://は省略できます。</span></div><div class="field full"><label>タグ</label><input name="tags" value="${esc((existing?.tags||[]).join('、'))}" placeholder="${FINANCE_RECORD_KINDS.has(kind)?'医療、生活、事業、返済 など':kind==='priorityIssue'?'緊急、手続き、医療、家族 など':kind==='habit'?'食事、ウォーキング、睡眠 など':'健康、挑戦、家族 など'}"></div><div class="field full duplicate-editor-slot" id="duplicateEditorSlot" hidden></div><div class="field full"><label>${FINANCE_RECORD_KINDS.has(kind)?'明細・契約書画像／添付':'画像・添付'}（任意・8MB以下）</label><input name="attachment" type="file"><span class="hint">添付はGoogle Driveへ保存します。同期設定が必要です。</span></div><p class="mobile-sheet-note field full">下へスクロールすると保存ボタンがあります。</p></div><div class="modal-actions"><button class="btn ghost" type="button" data-close>キャンセル</button><button class="btn" type="submit">${existing?'更新する':'保存する'}</button></div></form>`;
+  dialog.innerHTML = `<form id="recordForm"><div class="modal-head"><div><span class="badge">${existing?'編集':'新規'}</span><h2>${esc(KIND_LABELS[kind])}</h2></div><button class="icon-btn" type="button" data-close>×</button></div><div class="modal-body form-grid"><input type="hidden" name="kind" value="${kind}"><div class="field"><label>日付</label><input name="date" type="date" value="${esc(existing?.date || preset.date || localDateKey())}" required></div>${domainField}<div class="field full"><label>${titleLabel}</label><input name="title" value="${esc(existing?.title || preset.title || '')}" required placeholder="${titlePlaceholder}"></div><div class="field full"><label>${bodyLabel}</label><textarea name="body" placeholder="${bodyPlaceholder}">${esc(existing?.body || preset.body || '')}</textarea></div>${profileReferenceHtml(kind,{context:'editor'})}${detailFieldHtml(kind,seedDetails)}<div class="field full reference-links-field"><label>${urlLabel}（最大${MAX_REFERENCE_LINKS}件）</label><div id="referenceLinkRows" class="reference-link-editor">${editorLinks.map(referenceLinkEditorRow).join('')}</div><button class="btn small secondary add-reference" type="button" data-add-reference>＋ リンクを追加</button><span class="hint">公式サイト・SNS・YouTube・地図・予約／購入ページなど。名前は自由、https://は省略できます。</span></div><div class="field full"><label>タグ</label><input name="tags" value="${esc((existing?.tags||[]).join('、'))}" placeholder="${FINANCE_RECORD_KINDS.has(kind)?'医療、生活、事業、返済 など':kind==='priorityIssue'?'緊急、手続き、医療、家族 など':kind==='habit'?'食事、ウォーキング、睡眠 など':'健康、挑戦、家族 など'}"></div><div class="field full duplicate-editor-slot" id="duplicateEditorSlot" hidden></div><div class="field full"><label>${kind==='futureVision'?'理想イメージ画像／添付':FINANCE_RECORD_KINDS.has(kind)?'明細・契約書画像／添付':'画像・添付'}（任意・8MB以下）</label><input name="attachment" type="file" ${kind==='futureVision'?'accept="image/*" multiple':''}><span class="hint">${kind==='futureVision'?'ChatGPTなどの画像生成AIで作った理想イメージも添付できます。画像はGoogle Driveへ保存し、このカードから参照します。':'添付はGoogle Driveへ保存します。同期設定が必要です。'}</span></div><p class="mobile-sheet-note field full">下へスクロールすると保存ボタンがあります。</p></div><div class="modal-actions"><button class="btn ghost" type="button" data-close>キャンセル</button><button class="btn" type="submit">${existing?'更新する':'保存する'}</button></div></form>`;
   dialog.showModal();
   dialog.querySelectorAll('[data-close]').forEach(button => button.onclick=()=>dialog.close());
   const linkRows = dialog.querySelector('#referenceLinkRows');
@@ -1334,6 +1402,8 @@ function openRecordDialog(kind, id = '', preset = {}) {
     }
     if (kind === 'wish' && details.wishType !== 'やってみたいこと・挑戦・体験') delete details.experienceType;
     if (kind === 'wish' && !details.wishArea) details.wishArea = '一般';
+    if (kind === 'futureVision' && !details.futureArea) details.futureArea = 'ライフスタイル';
+    if (kind === 'futureVision' && !details.futureStatus) details.futureStatus = '目指している';
     if (kind === 'healthItem' && !details.healthItemType) details.healthItemType = '症状・健康管理';
     if (kind === 'healthItem' && !MEDICAL_PLAN_TYPES.has(details.healthItemType)) {
       for (const key of ['medicalStatus','facilityWishId','department','targetDate','estimatedCost','hospitalDays','recoveryTime','physicalImpact','mentalImpact','incomeImpact']) delete details[key];
@@ -1355,13 +1425,14 @@ function openRecordDialog(kind, id = '', preset = {}) {
     const record = normalizeRecord(base,kind);
     if (existing) state[key][state[key].findIndex(row=>row.id===id)] = record;
     else state[key].push(record);
-    const file = form.elements.attachment?.files?.[0];
-    if (file) {
+    const files = [...(form.elements.attachment?.files || [])];
+    if (files.length) {
       try {
-        const attachment = await uploadAttachment(state,file);
-        record.details.attachments = [...(record.details.attachments || []),attachment];
+        const uploaded = [];
+        for (const file of files) uploaded.push(await uploadAttachment(state,file));
+        record.details.attachments = [...(record.details.attachments || []), ...uploaded];
       } catch (error) {
-        toast(`本文は保存しましたが、添付は保存できませんでした：${error.message}`,'error');
+        toast(`本文は保存しましたが、一部または全部の添付を保存できませんでした：${error.message}`,'error');
       }
     }
     await commit(state,`${KIND_LABELS[kind]}を${existing?'更新':'保存'}しました`);
@@ -1380,6 +1451,7 @@ function detailDisplayValue(key, value) {
 
 function defaultDomain(kind) {
   if (kind === 'priorityIssue') return 'challenge';
+  if (kind === 'futureVision') return 'freedom';
   if (kind === 'healthItem') return 'health';
   if (FINANCE_RECORD_KINDS.has(kind)) return 'income';
   if (kind === 'product') return 'work';
@@ -1588,6 +1660,10 @@ async function handleAction(action, element) {
       const url = isCustomGptUrl(entered) ? entered : 'https://chatgpt.com/gpts';
       window.open(url, '_blank', 'noopener,noreferrer'); return;
     }
+    if (action === 'export-universal-md') return exportUniversalArtifact('md');
+    if (action === 'export-universal-json') return exportUniversalArtifact('json');
+    if (action === 'export-universal-prompt') return exportUniversalArtifact('prompt');
+    if (action === 'save-universal-scopes') return saveUniversalScopes();
     if (action === 'export-json') { downloadBlob(exportBackup(state),`LifeCompassAIOS_backup_${dateStamp()}.json`);toast('JSONバックアップを書き出しました');return; }
     if (action === 'import-json') return $('#jsonFile').click();
     if (action.startsWith('export-')) return exportFor(action);
@@ -1634,6 +1710,35 @@ async function generateReview(period,button) {
     state.reviews.push(normalizeRecord({kind:'review',domain:'happiness',title:`${labels[period]}レビュー`,body:item.answer,date:localDateKey(),details:{period},createdAt:item.createdAt,updatedAt:item.createdAt},'review'));
     await commit(state,`${labels[period]}レビューを保存しました`);render();
   } catch(error) { button.disabled=false;button.textContent='もう一度試す';toast(error.message,'error'); }
+}
+
+
+function exportUniversalArtifact(type) {
+  const scopes = currentScopes('universal');
+  state.settings.integrations.universal.scopes = scopes;
+  if (type === 'md') {
+    const text = buildUniversalAIContextMarkdown(state, scopes);
+    downloadBlob(new Blob([text], { type:'text/markdown;charset=utf-8' }), `LifeCompass_Universal_AI_Context_${dateStamp()}.md`);
+    toast('あらゆるAIへ添付できるMarkdownコンテキストを書き出しました');
+    return;
+  }
+  if (type === 'json') {
+    const text = JSON.stringify(buildUniversalAIContextJson(state, scopes), null, 2);
+    downloadBlob(new Blob([text], { type:'application/json;charset=utf-8' }), `LifeCompass_Universal_AI_Context_${dateStamp()}.json`);
+    toast('構造化AIコンテキストを書き出しました');
+    return;
+  }
+  downloadBlob(new Blob([buildUniversalAIStarterPrompt()], { type:'text/plain;charset=utf-8' }), `LifeCompass_AI_Starter_Prompt_${dateStamp()}.txt`);
+  toast('外部AIの最初に貼る開始プロンプトを書き出しました');
+}
+
+async function saveUniversalScopes() {
+  state.settings.integrations.universal = {
+    ...(state.settings.integrations.universal || {}),
+    enabled: true,
+    scopes: currentScopes('universal')
+  };
+  await commit(state,'外部AIコンテキストの共有範囲を保存しました',{rerender:true});
 }
 
 function exportFor(action) {
@@ -1698,11 +1803,11 @@ async function registerServiceWorker() {
   if (!('serviceWorker' in navigator)) return;
   const hadController = Boolean(navigator.serviceWorker.controller);
   try {
-    const registration = await navigator.serviceWorker.register('./sw.js?v=3.4.0', { updateViaCache:'none' });
+    const registration = await navigator.serviceWorker.register('./sw.js?v=3.5.0', { updateViaCache:'none' });
     await registration.update();
     if (hadController) {
       navigator.serviceWorker.addEventListener('controllerchange',()=>{
-        const refreshKey='life-compass-sw-refresh-v3.4.0';
+        const refreshKey='life-compass-sw-refresh-v3.5.0';
         if(sessionStorage.getItem(refreshKey))return;
         sessionStorage.setItem(refreshKey,'1');
         location.reload();
