@@ -422,7 +422,7 @@ button:disabled{cursor:wait;opacity:.58}
 @media(max-width:560px){.future-horizon-meter{grid-template-columns:48px 1fr 48px}.future-horizon-meter b{font-size:20px}.future-image-strip{grid-template-columns:1fr}.future-area-summary{grid-template-columns:1fr 1fr}.future-life-teaser .btn-row{display:grid;grid-template-columns:1fr}.future-life-teaser .btn{width:100%}}
 .dashboard-future{--dashboard-accent:#5c72c7}
 
-/* v3.6.1: 人型カルテ・人生ゲームボード・カードのグラフィック化 */
+/* v3.6.2: 人型カルテ・人生ゲームボード・カードのグラフィック化 */
 .record{--visual:#1769d8;border-left:5px solid var(--visual)}
 .record.visual-green{--visual:#218456}.record.visual-purple{--visual:#7041be}.record.visual-orange{--visual:#c86c09}.record.visual-pink{--visual:#c9326b}.record.visual-red{--visual:#c9323e}.record.visual-teal{--visual:#087d72}.record.visual-navy{--visual:#173e70}
 .record-lead{display:grid;justify-items:start;gap:7px}.record-visual{width:52px;height:52px;border:3px solid var(--visual);border-radius:17px;background:#fff;display:grid;place-items:center;font-size:27px;box-shadow:0 5px 13px color-mix(in srgb,var(--visual) 18%,transparent)}.visual-icon-select{font-size:23px!important}.visual-picker select{min-height:51px}

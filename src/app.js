@@ -132,6 +132,8 @@ const BODY_REGIONS = [
   { id:'head', label:'頭・頭部', view:'front', x:50, y:7 },
   { id:'left_eye', label:'左目', view:'front', x:39, y:14 },
   { id:'right_eye', label:'右目', view:'front', x:61, y:14 },
+  { id:'nose', label:'鼻', view:'front', x:50, y:11.8 },
+  { id:'mouth_teeth', label:'口（歯）', view:'front', x:50, y:16.8 },
   { id:'neck', label:'首・のど', view:'front', x:50, y:22 },
   { id:'left_shoulder', label:'左肩', view:'front', x:27, y:28 },
   { id:'right_shoulder', label:'右肩', view:'front', x:73, y:28 },
@@ -2083,11 +2085,11 @@ async function registerServiceWorker() {
   if (!('serviceWorker' in navigator)) return;
   const hadController = Boolean(navigator.serviceWorker.controller);
   try {
-    const registration = await navigator.serviceWorker.register('./sw.js?v=3.6.1', { updateViaCache:'none' });
+    const registration = await navigator.serviceWorker.register('./sw.js?v=3.6.2', { updateViaCache:'none' });
     await registration.update();
     if (hadController) {
       navigator.serviceWorker.addEventListener('controllerchange',()=>{
-        const refreshKey='life-compass-sw-refresh-v3.6.1';
+        const refreshKey='life-compass-sw-refresh-v3.6.2';
         if(sessionStorage.getItem(refreshKey))return;
         sessionStorage.setItem(refreshKey,'1');
         location.reload();
