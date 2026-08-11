@@ -107,6 +107,75 @@ const DETAIL_FIELDS = {
 };
 const DETAIL_LABELS = Object.fromEntries(Object.values(DETAIL_FIELDS).flat().map(([key,label]) => [key,label]));
 DETAIL_LABELS.referenceUrl = '関連URL';
+Object.assign(DETAIL_LABELS, {
+  bodyRegionLabel:'身体の部位', bodyStatuses:'状態', painLevel:'痛みの強さ',
+  diagnosis:'病名・症状', medicalFacility:'病院・クリニック',
+  treatmentHistory:'治療・手術の内容', bodyNotes:'部位メモ',
+  visualIcon:'カードのイメージ', visualColor:'カードの色'
+});
+
+const BODY_STATUS_OPTIONS = [
+  { id:'pain', label:'痛み・不調あり', short:'痛み', className:'pain' },
+  { id:'treatment', label:'治療中・治療歴あり', short:'治療', className:'treatment' },
+  { id:'surgery', label:'手術済み', short:'手術', className:'surgery' },
+  { id:'observation', label:'経過観察・改善', short:'経過', className:'observation' }
+];
+
+const VISUAL_ICONS = ['📝','💡','❤️','🩺','🏥','👁️','🦴','🎯','🌱','⭐','🏆','✈️','♨️','🏡','🚐','🛍️','💰','💼','👨‍👩‍👧','📚','😊'];
+const VISUAL_COLORS = [
+  { id:'blue', label:'青' }, { id:'green', label:'緑' }, { id:'purple', label:'紫' },
+  { id:'orange', label:'オレンジ' }, { id:'pink', label:'ピンク' }, { id:'red', label:'赤' },
+  { id:'teal', label:'青緑' }, { id:'navy', label:'紺' }
+];
+
+const BODY_REGIONS = [
+  { id:'head', label:'頭・頭部', view:'front', x:50, y:7 },
+  { id:'left_eye', label:'左目', view:'front', x:39, y:14 },
+  { id:'right_eye', label:'右目', view:'front', x:61, y:14 },
+  { id:'neck', label:'首・のど', view:'front', x:50, y:22 },
+  { id:'left_shoulder', label:'左肩', view:'front', x:27, y:28 },
+  { id:'right_shoulder', label:'右肩', view:'front', x:73, y:28 },
+  { id:'chest', label:'胸部', view:'front', x:50, y:32 },
+  { id:'left_upper_arm', label:'左上腕', view:'front', x:18, y:36 },
+  { id:'right_upper_arm', label:'右上腕', view:'front', x:82, y:36 },
+  { id:'upper_abdomen', label:'上腹部', view:'front', x:50, y:41 },
+  { id:'left_elbow', label:'左ひじ', view:'front', x:13, y:46 },
+  { id:'right_elbow', label:'右ひじ', view:'front', x:87, y:46 },
+  { id:'lower_abdomen', label:'下腹部', view:'front', x:50, y:50 },
+  { id:'left_hand', label:'左手・手首', view:'front', x:8, y:58 },
+  { id:'right_hand', label:'右手・手首', view:'front', x:92, y:58 },
+  { id:'left_hip', label:'左股関節・鼠径部', view:'front', x:39, y:57 },
+  { id:'right_hip', label:'右股関節・鼠径部', view:'front', x:61, y:57 },
+  { id:'left_thigh', label:'左太もも', view:'front', x:38, y:67 },
+  { id:'right_thigh', label:'右太もも', view:'front', x:62, y:67 },
+  { id:'left_knee', label:'左ひざ', view:'front', x:38, y:77 },
+  { id:'right_knee', label:'右ひざ', view:'front', x:62, y:77 },
+  { id:'left_lower_leg', label:'左すね・下腿', view:'front', x:38, y:87 },
+  { id:'right_lower_leg', label:'右すね・下腿', view:'front', x:62, y:87 },
+  { id:'left_foot', label:'左足首・足', view:'front', x:34, y:97 },
+  { id:'right_foot', label:'右足首・足', view:'front', x:66, y:97 },
+  { id:'back_head', label:'後頭部', view:'back', x:50, y:7 },
+  { id:'back_neck', label:'首の後ろ', view:'back', x:50, y:22 },
+  { id:'left_shoulder_back', label:'左肩・肩甲骨', view:'back', x:29, y:29 },
+  { id:'right_shoulder_back', label:'右肩・肩甲骨', view:'back', x:71, y:29 },
+  { id:'upper_back', label:'背中上部', view:'back', x:50, y:33 },
+  { id:'left_arm_back', label:'左腕後面', view:'back', x:17, y:39 },
+  { id:'right_arm_back', label:'右腕後面', view:'back', x:83, y:39 },
+  { id:'lower_back', label:'腰', view:'back', x:50, y:46 },
+  { id:'left_hand_back', label:'左手後面', view:'back', x:8, y:58 },
+  { id:'right_hand_back', label:'右手後面', view:'back', x:92, y:58 },
+  { id:'sacrum', label:'仙骨・尾骨', view:'back', x:50, y:55 },
+  { id:'left_buttock', label:'左臀部', view:'back', x:39, y:61 },
+  { id:'right_buttock', label:'右臀部', view:'back', x:61, y:61 },
+  { id:'left_thigh_back', label:'左太もも後面', view:'back', x:39, y:70 },
+  { id:'right_thigh_back', label:'右太もも後面', view:'back', x:61, y:70 },
+  { id:'left_knee_back', label:'左ひざ裏', view:'back', x:39, y:78 },
+  { id:'right_knee_back', label:'右ひざ裏', view:'back', x:61, y:78 },
+  { id:'left_calf', label:'左ふくらはぎ', view:'back', x:39, y:87 },
+  { id:'right_calf', label:'右ふくらはぎ', view:'back', x:61, y:87 },
+  { id:'left_heel', label:'左かかと・足裏', view:'back', x:34, y:97 },
+  { id:'right_heel', label:'右かかと・足裏', view:'back', x:66, y:97 }
+];
 const AI_QUESTION_PRESETS = {
   common: [
     { id:'reality-first', label:'夢より先に片づける現実課題を確認', question:'最優先課題、目標期限、医療予定、お金、現在の制約を横断し、夢や長期目標を進める前に先に片づけるべき現実課題があるか確認してください。本人の希望に合わせず、放置リスク・期限・生活への影響を基準に順位を付け、今すぐ／すぐに／早めに／考えてから行動の区分も踏まえてください。' },
@@ -841,12 +910,66 @@ function futureAreaSummaryHtml(rows) {
   return `<div class="future-area-summary">${FUTURE_LIFE_AREAS.map(area=>{const count=rows.filter(row=>row.details?.futureArea===area).length;return `<div class="future-area-chip ${count?'has-data':''}"><b>${esc(area)}</b><span>${count}件</span></div>`}).join('')}</div>`;
 }
 
+function lifeGameData() {
+  const goals = activeRows(state.goals).sort((a,b)=>{
+    const priority = {高:0,中:1,低:2};
+    return (priority[a.details?.priority] ?? 3) - (priority[b.details?.priority] ?? 3)
+      || String(a.details?.dueDate || '9999').localeCompare(String(b.details?.dueDate || '9999'));
+  });
+  const openGoals = goals.filter(row => !completionMeta(row,'goal').completed);
+  const openPriorities = priorityRows();
+  const wishes = activeRows(state.wishes);
+  const openWishes = wishes.filter(row => !completionMeta(row,'wish').completed);
+  const futureVisions = activeRows(state.futureVisions || []).sort((a,b)=>new Date(b.updatedAt||0)-new Date(a.updatedAt||0));
+  const comparisons = activeRows(state.comparisons).sort((a,b)=>new Date(b.updatedAt||0)-new Date(a.updatedAt||0));
+  const weakest = [...DOMAINS].sort((a,b)=>Number(state.scores[a.id]||0)-Number(state.scores[b.id]||0))[0];
+  const firstPriority = openPriorities[0];
+  const nextGoal = openGoals[0];
+  const middleGoal = openGoals[1] || activeRows(state.habits)[0];
+  const dream = openWishes.find(row=>row.details?.priority==='高') || openWishes[0];
+  const future = futureVisions[0];
+  const ideal = future?.title || comparisons.find(row=>row.details?.newIdeal)?.details?.newIdeal
+    || [openWishes[0]?.title,openWishes[1]?.title].filter(Boolean).join('・')
+    || '理想の未来カードを登録すると、ここがあなたのゴールになります';
+  const completedGoals = goals.filter(row=>completionMeta(row,'goal').completed).length;
+  const completedWishes = wishes.filter(row=>completionMeta(row,'wish').completed).length;
+  const completedPriorities = activeRows(state.records).filter(row=>row.kind==='priorityIssue'&&completionMeta(row,'priorityIssue').completed).length;
+  const progressValues = goals.map(row=>Number(row.details?.progress || (completionMeta(row,'goal').completed?100:0))).filter(Number.isFinite);
+  const progress = progressValues.length ? Math.round(progressValues.reduce((sum,value)=>sum+Math.max(0,Math.min(100,value)),0)/progressValues.length) : 0;
+  const nextText = firstPriority?.details?.nextAction || firstPriority?.title || nextGoal?.details?.firstStep || nextGoal?.title || '最優先の課題・目標を登録';
+  return {
+    medals:completedGoals+completedWishes+completedPriorities,
+    progress,
+    activeQuests:openPriorities.length+openGoals.length+openWishes.length,
+    nodes:[
+      {icon:'🧭',label:'現在地',text:`${weakest.label} ${state.scores[weakest.id]}点から整える`,state:'current'},
+      {icon:'👣',label:'次の一歩',text:nextText,state:(firstPriority||nextGoal)?'active':'empty'},
+      {icon:'🎯',label:'中間クエスト',text:middleGoal?.title || '次の目標・習慣を登録',state:middleGoal?'active':'empty'},
+      {icon:'⭐',label:'叶えたいこと',text:dream?.title || '欲しいもの・行きたい場所を登録',state:dream?'active':'empty'},
+      {icon:'🏆',label:'自分の勝利条件',text:ideal,state:(progress>=100&&completedGoals+completedWishes>0)?'done':'goal'}
+    ]
+  };
+}
+
+function renderLifeGame() {
+  const game = lifeGameData();
+  return `${sectionHead('理想の未来｜人生ゲームボード','誰かに勝つゲームではなく、自分が望む人生へ近づくためのルートです。','<div class="btn-row"><button class="btn secondary" data-action="new-record" data-kind="goal">＋ クエスト</button><button class="btn secondary" data-action="new-record" data-kind="futureVision">＋ 勝利条件</button></div>')}
+  <section class="card life-game-board">
+    <div class="life-game-sky"><span class="life-game-title">LIFE QUEST</span><h3>相棒の人生は、まだ攻略の途中。</h3><p>現在地から理想の未来まで、登録した課題・目標・夢を一本のルートにします。</p></div>
+    <div class="game-metrics"><div><span>🏅</span><b>${game.medals}</b><small>達成メダル</small></div><div><span>🗺️</span><b>${game.activeQuests}</b><small>進行クエスト</small></div><div><span>🚩</span><b>${game.progress}%</b><small>目標の平均進捗</small></div></div>
+    <div class="game-progress" aria-label="目標の平均進捗 ${game.progress}%"><i style="width:${Math.max(0,Math.min(100,game.progress))}%"></i><span style="left:${Math.max(3,Math.min(97,game.progress))}%">🚐</span></div>
+    <div class="game-route">${game.nodes.map((node,index)=>`<article class="game-node node-${node.state}"><span class="game-step">${index+1}</span><div class="game-node-icon">${node.icon}</div><small>${esc(node.label)}</small><b>${esc(node.text)}</b>${node.state==='done'?'<span class="game-clear">CLEAR!</span>':''}</article>`).join('')}</div>
+    <p class="game-rule"><b>勝利条件：</b>理想を100％完璧に達成することではなく、健康や現実の制約を守りながら、自分の望む方向へ進み続けること。</p>
+  </section>`;
+}
+
 function renderFuture() {
   const rows = activeRows(state.futureVisions || []);
   const grouped = FUTURE_LIFE_AREAS.map(area => [area, rows.filter(row => (row.details?.futureArea || 'その他') === area)]).filter(([,items]) => items.length);
   return `<div class="page-enter future-page">
     <div class="hero future-hero"><div class="hero-grid"><div><span class="badge blue">NORTH STAR</span><h2>過去の理想ではなく、これから作る理想の人生。</h2><p>健康・収入・家族・住宅・ライフスタイルなどを「到達できるか」だけでなく、これから向かいたい方角として残します。AIはここを基準に、目標や欲しいもの、行きたい場所とのズレも分析します。</p><div class="btn-row"><button class="btn" data-action="new-record" data-kind="futureVision">＋ 理想の未来カード</button><button class="btn secondary" data-page="ai">AIに方向性を分析してもらう</button></div></div><div class="life-score">✧<small>FUTURE</small></div></div></div>
     ${futureHorizonHtml()}
+    ${renderLifeGame()}
     ${sectionHead('理想の人生を分野別に描く','100%達成できなくても、少し近づけば成功と考えるための基準を作ります。')}
     ${futureAreaSummaryHtml(rows)}
     <section class="card future-image-guide"><div><h3>画像でも理想を残せます</h3><p>ChatGPTなどの画像生成AIで「理想の家・暮らし・旅・働き方」のイメージを作り、カードの「理想イメージ画像／添付」から登録できます。画像生成用の文章はカード内の「理想イメージ画像の生成プロンプト・メモ」に保存できます。</p></div><span>▧</span></section>
@@ -874,16 +997,73 @@ function renderLife() {
   ${lifeView==='mindmap'?renderLifeMindMap(lifeData):cards}</div>`;
 }
 
+function bodyMapRows() {
+  return activeRows(state.healthItems).filter(row => row.details?.bodyRegion);
+}
+
+function bodyRegionRow(regionId) {
+  return bodyMapRows().filter(row => row.details?.bodyRegion === regionId)
+    .sort((a,b) => new Date(b.updatedAt || b.createdAt || 0) - new Date(a.updatedAt || a.createdAt || 0))[0] || null;
+}
+
+function bodyStatus(id) {
+  return BODY_STATUS_OPTIONS.find(option => option.id === id);
+}
+
+function bodySilhouette(view) {
+  const backLines = view === 'back' ? '<path d="M70 147 Q100 168 130 147 M77 260 Q100 276 123 260"/><path d="M100 118 L100 265" stroke-dasharray="5 7"/>' : '<path d="M76 148 Q100 160 124 148 M82 235 Q100 246 118 235"/>';
+  return `<svg class="body-silhouette" viewBox="0 0 200 520" role="img" aria-label="身体の${view==='front'?'前面':'背面'}図">
+    <g fill="#f7fbff" stroke="#183b66" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round">
+      <ellipse cx="100" cy="45" rx="31" ry="38"/><path d="M85 80 L84 99 Q62 105 53 126 L47 210 L31 300 Q26 314 37 318 Q48 320 53 303 L66 225 L70 185 L73 276 L64 380 L70 502 Q73 513 86 507 L96 384 L100 293 L104 384 L114 507 Q127 513 130 502 L136 380 L127 276 L130 185 L134 225 L147 303 Q152 320 163 318 Q174 314 169 300 L153 210 L147 126 Q138 105 116 99 L115 80 Z"/>
+      ${backLines}
+    </g>
+  </svg>`;
+}
+
+function bodyZoneButton(region) {
+  const row = bodyRegionRow(region.id);
+  const statuses = Array.isArray(row?.details?.bodyStatuses) ? row.details.bodyStatuses.filter(id => bodyStatus(id)) : [];
+  const classes = statuses.map(id => `is-${bodyStatus(id).className}`).join(' ');
+  const label = statuses.length ? `${region.label}：${statuses.map(id => bodyStatus(id).short).join('・')}` : `${region.label}：記録なし`;
+  return `<button class="body-zone ${statuses.length?'selected':''} ${classes}" style="--zone-x:${region.x}%;--zone-y:${region.y}%" data-action="edit-body-region" data-region="${esc(region.id)}" aria-label="${esc(label)}" title="${esc(label)}"><span class="body-zone-check">${statuses.length?'✓':''}</span><span class="body-zone-dots" aria-hidden="true">${statuses.map(id=>`<i class="dot-${bodyStatus(id).className}"></i>`).join('')}</span></button>`;
+}
+
+function bodyFigure(view) {
+  const label = view === 'front' ? '前面' : '背面';
+  const regions = BODY_REGIONS.filter(region => region.view === view);
+  return `<section class="body-figure-card"><h3>${label}</h3><p>四角を押して部位を登録</p><div class="body-figure">${bodySilhouette(view)}${regions.map(bodyZoneButton).join('')}</div></section>`;
+}
+
+function bodyStatusLegend() {
+  return `<div class="body-status-legend" aria-label="身体マップの色分け">${BODY_STATUS_OPTIONS.map(option=>`<span class="body-status-chip status-${option.className}"><i></i>${option.label}</span>`).join('')}</div>`;
+}
+
+function renderBodyMap() {
+  const rows = bodyMapRows();
+  const totals = Object.fromEntries(BODY_STATUS_OPTIONS.map(option => [option.id, rows.filter(row => row.details?.bodyStatuses?.includes(option.id)).length]));
+  return `<section id="human-body-chart" class="body-map-section" aria-labelledby="human-body-chart-title">
+  ${sectionHead('人型カルテ｜身体マップ','人型の前面・背面にある四角へレ点を付け、痛み・治療・手術の場所を一目で確認できます。')}
+  <div class="card body-map-panel">
+    <div class="body-map-intro"><div><span class="badge red">人型カルテ</span><h3 id="human-body-chart-title">痛い・治療した部位の四角をタップ</h3><p>四角を押し、「痛みあり・治療中／治療歴・手術済み・経過観察」から選びます。日付、病名・症状、病院、治療・手術内容も同じ部位へ保存できます。登録済みの四角には✓が付きます。</p></div><div class="body-map-totals">${BODY_STATUS_OPTIONS.map(option=>`<div class="status-${option.className}"><b>${totals[option.id]}</b><span>${option.short}</span></div>`).join('')}</div></div>
+    ${bodyStatusLegend()}
+    <div class="body-map-grid">${bodyFigure('front')}${bodyFigure('back')}</div>
+    <p class="body-map-note">※ 身体マップは診断機能ではありません。症状の整理と受診時の説明に使う記録です。</p>
+  </div></section>`;
+}
+
 function renderHealth() {
   const healthRows = activeRows(state.healthItems);
   const medicalPlans = healthRows.filter(isMedicalPlan);
-  const regularHealth = healthRows.filter(row => !isMedicalPlan(row));
+  const regularHealth = healthRows.filter(row => !isMedicalPlan(row) && !row.details?.bodyRegion);
+  const mappedItems = bodyMapRows().sort((a,b)=>new Date(b.updatedAt||0)-new Date(a.updatedAt||0));
   const medicalWishes = activeRows(state.wishes).filter(row => MEDICAL_WISH_AREAS.has(String(row.details?.wishArea || '')));
   const medicalWanted = medicalWishes.filter(row => (row.details?.wishType || '欲しいもの') === '欲しいもの');
   const medicalPlaces = medicalWishes.filter(row => row.details?.wishType === '行きたい場所' && row.details?.wishArea === '医療');
   const medicalExperiences = medicalWishes.filter(row => row.details?.wishType === 'やってみたいこと・挑戦・体験');
-  return `<div class="page-enter"><div class="hero"><div class="hero-grid"><div><span class="badge">HEALTH & MEDICAL COMPASS</span><h2>健康の記録と、これからの医療計画を分けて整理。</h2><p>既往歴はプロフィールを正本にし、症状の経過、手術・治療・検査の予定、病院候補、身体・メンタル・収入への影響を一つにつなぎます。</p><div class="btn-row"><button class="btn secondary" data-action="new-record" data-kind="healthItem" data-health-type="症状・健康管理">＋ 健康項目</button><button class="btn" data-action="new-record" data-kind="healthItem" data-health-type="治療・手術計画">＋ 手術・治療計画</button></div></div><div class="life-score">${state.scores.health}<small>HEALTH</small></div></div></div>
+  return `<div class="page-enter"><div class="hero"><div class="hero-grid"><div><span class="badge">HEALTH & MEDICAL COMPASS</span><h2>健康の記録と、これからの医療計画を分けて整理。</h2><p>既往歴はプロフィールを正本にし、症状の経過、手術・治療・検査の予定、病院候補、身体・メンタル・収入への影響を一つにつなぎます。</p><div class="btn-row"><button class="btn body-chart-button" data-action="scroll-body-map">▣ 人型カルテを開く</button><button class="btn secondary" data-action="new-record" data-kind="healthItem" data-health-type="症状・健康管理">＋ 健康項目</button><button class="btn secondary" data-action="new-record" data-kind="healthItem" data-health-type="治療・手術計画">＋ 手術・治療計画</button></div></div><div class="life-score">${state.scores.health}<small>HEALTH</small></div></div></div>
+  ${renderBodyMap()}
   ${sectionHead('健康の基本情報','既往歴などはプロフィールを正本として自動参照します。ここで同じ内容を入力し直す必要はありません。')}${profileReferenceHtml('healthItem',{context:'page'})}
+  ${mappedItems.length?`${sectionHead('身体マップの登録一覧','登録した部位を文章でも確認・編集できます。')}<div class="body-map-records record-list">${mappedItems.map(row=>recordCard(row,'healthItem')).join('')}</div>`:''}
   ${sectionHead('現在の健康・メンタル','症状、血圧、視力、腰、日々の健康管理やメンタルの変化を記録','<div class="btn-row"><button class="btn secondary" data-action="new-record" data-kind="healthItem" data-health-type="症状・健康管理">＋ 症状・健康</button><button class="btn secondary" data-action="new-record" data-kind="healthItem" data-health-type="メンタル">＋ メンタル</button></div>')}${recordList(regularHealth,'healthItem')}
   ${sectionHead('医療計画','将来の手術・治療・検査・受診を、予定日や負担まで含めて管理','<div class="btn-row"><button class="btn" data-action="new-record" data-kind="healthItem" data-health-type="治療・手術計画">＋ 手術・治療</button><button class="btn secondary" data-action="new-record" data-kind="healthItem" data-health-type="検査・受診予定">＋ 検査・受診</button></div>')}${medicalPlans.length?recordList(medicalPlans,'healthItem'):'<div class="empty">医療計画はまだありません。将来予定している手術や検査をここへ追加できます。</div>'}
   ${medicalBalanceHtml(medicalPlans)}
@@ -1165,7 +1345,13 @@ function recordCard(row, fallbackKind) {
   const primaryMoney = kind === 'debtRecord' ? moneyNumber(row.details?.remainingBalance || row.details?.originalAmount) : moneyNumber(row.details?.amount);
   const incomeAmountHtml = financeCard && primaryMoney > 0 ? `<strong class="income-card-amount">${incomeYen(primaryMoney)}${kind==='debtRecord'?'<small> 現在残高</small>':''}</strong>` : '';
   const completionButton = completion.eligible ? `<button class="btn small ${completed?'ghost':'completion-action'}" data-action="toggle-completion" data-kind="${esc(kind)}" data-id="${esc(row.id)}">${esc(completion.button)}</button>` : '';
-  return `<article class="record ${wishClass} ${financeCard?'income-record':''} ${priorityCard?`priority-record ${(PRIORITY_META[row.details?.issuePriority]||PRIORITY_META['早めに']).className}`:''} ${completed?'completed':''} ${deadline?.className||''}">${completed?`<span class="completion-ribbon">✓ ${esc(completion.ribbon)}</span>`:''}<span class="record-date">${displayDate(row.date)}</span><div><span class="badge">${esc(financeCard?'お金':domainLabel(row.domain))}</span><h3>${esc(row.title)}</h3>${priorityCard?priorityBadgeHtml(row):''}${incomeAmountHtml}<p>${esc(row.body)}</p>${progress!==null?`<div class="progress" title="進捗 ${progress}%"><i style="width:${Math.max(0,Math.min(100,progress))}%"></i></div>`:''}<div class="record-meta">${deadline?`<span class="deadline-badge ${deadline.className}">⚠ ${esc(deadline.label)}・期限 ${displayDate(row.details.dueDate)}</span>`:''}${row.details?.incomeType?`<span class="badge income-type-tag">${esc(row.details.incomeType)}</span>`:''}${row.details?.sourceName?`<span class="badge">収入元 ${esc(row.details.sourceName)}</span>`:''}${row.details?.incomePeriod?`<span class="badge">${esc(row.details.incomePeriod)}</span>`:''}${row.details?.incomeStatus?`<span class="badge ${row.details.incomeStatus==='見込'?'warn':row.details.incomeStatus==='確定'?'completion':''}">${esc(row.details.incomeStatus)}</span>`:''}${row.details?.amountKind?`<span class="badge">${esc(row.details.amountKind)}</span>`:''}${row.details?.expenseType?`<span class="badge expense-type-tag">${esc(row.details.expenseType)}</span>`:''}${row.details?.expensePeriod?`<span class="badge">${esc(row.details.expensePeriod)}</span>`:''}${row.details?.expenseStatus?`<span class="badge ${row.details.expenseStatus==='予定'?'warn':''}">${esc(row.details.expenseStatus)}</span>`:''}${row.details?.fixedCostType?`<span class="badge fixed-type-tag">${esc(row.details.fixedCostType)}</span>`:''}${row.details?.fixedCostFrequency?`<span class="badge">${esc(row.details.fixedCostFrequency)}</span>`:''}${row.details?.fixedCostStatus?`<span class="badge ${row.details.fixedCostStatus==='見直し候補'?'warn':''}">${esc(row.details.fixedCostStatus)}</span>`:''}${row.details?.debtType?`<span class="badge debt-type-tag">${esc(row.details.debtType)}</span>`:''}${row.details?.lenderName?`<span class="badge">借入先 ${esc(row.details.lenderName)}</span>`:''}${row.details?.monthlyPayment?`<span class="badge">毎月返済 ${incomeYen(moneyNumber(row.details.monthlyPayment))}</span>`:''}${row.details?.debtStatus?`<span class="badge ${row.details.debtStatus==='完済'?'completion':row.details.debtStatus==='返済猶予'?'warn':''}">${esc(row.details.debtStatus)}</span>`:''}${row.details?.issueCategory?`<span class="badge">${esc(row.details.issueCategory)}</span>`:''}${row.details?.issueStatus?`<span class="badge ${row.details.issueStatus==='解決済み'?'completion':row.details.issueStatus==='待ち'?'warn':''}">${esc(row.details.issueStatus)}</span>`:''}${priorityCard&&row.details?.dueDate?`<span class="deadline-badge ${(priorityDeadlineInfo(row)||{}).className||''}">期限 ${displayDate(row.details.dueDate)}${priorityDeadlineInfo(row)?` ・ ${esc(priorityDeadlineInfo(row).label)}`:''}</span>`:''}${row.details?.wishType?`<span class="badge wish-type-tag ${wishClass}">${esc(row.details.wishType)}</span>`:''}${row.details?.wishArea?`<span class="badge wish-area-tag wish-area-${wishAreaClass(row.details.wishArea)}">${esc(row.details.wishArea)}</span>`:''}${row.details?.experienceType?`<span class="badge">${esc(row.details.experienceType)}</span>`:''}${kind==='healthItem'?`<span class="badge health-type-tag">${esc(healthItemType(row))}</span>`:''}${row.details?.medicalStatus?`<span class="badge ${row.details.medicalStatus==='完了'?'completion':row.details.medicalStatus==='実施予定'?'warn':''}">${esc(row.details.medicalStatus)}</span>`:''}${row.details?.facilityWishId&&relatedMedicalPlaceName(row.details.facilityWishId)?`<span class="badge medical-facility">医療機関 ${esc(relatedMedicalPlaceName(row.details.facilityWishId))}</span>`:''}${impactBadge('身体',row.details?.physicalImpact)}${impactBadge('メンタル',row.details?.mentalImpact)}${impactBadge('収入',row.details?.incomeImpact)}${row.details?.wishStatus?`<span class="badge ${row.details.wishStatus==='実現済み'?'completion':''}">${esc(row.details.wishStatus)}</span>`:''}${row.details?.goalStatus?`<span class="badge ${row.details.goalStatus==='達成済み'?'completion':''}">${esc(row.details.goalStatus)}</span>`:''}${row.details?.priority?`<span class="badge ${row.details.priority==='高'?'warn':''}">優先度 ${esc(row.details.priority)}</span>`:''}${row.details?.frequency?`<span class="badge">${esc(row.details.frequency)}</span>`:''}${row.details?.budget?`<span class="badge">予算 ${esc(row.details.budget)}</span>`:''}${kind==='futureVision'&&row.details?.futureArea?`<span class="badge future-area">${esc(row.details.futureArea)}</span>`:''}${kind==='futureVision'&&row.details?.futureStatus?`<span class="badge future-status">${esc(row.details.futureStatus)}</span>`:''}${kind==='futureVision'&&row.details?.targetAge?`<span class="badge">目安 ${esc(row.details.targetAge)}歳</span>`:''}</div>${kind==='futureVision'?futureVisionImageHtml(attachments):''}${referenceLinksHtml(row.details,true)}${attachments.filter(file=>kind!=='futureVision'||!String(file.mimeType||'').startsWith('image/')).map(file=>`<a class="attachment-link" href="${esc(file.url)}" target="_blank" rel="noopener noreferrer">添付：${esc(file.name)}</a>`).join('')}</div><div class="record-actions">${completionButton}<button class="btn small ghost" data-action="view-record" data-kind="${esc(kind)}" data-id="${esc(row.id)}">見る</button><button class="btn small ghost" data-action="edit-record" data-kind="${esc(kind)}" data-id="${esc(row.id)}">編集</button><button class="btn small danger" data-action="delete-record" data-kind="${esc(kind)}" data-id="${esc(row.id)}">削除</button></div></article>`;
+  const bodyStatusBadges = Array.isArray(row.details?.bodyStatuses) ? row.details.bodyStatuses.map(id=>bodyStatus(id)).filter(Boolean).map(option=>`<span class="badge body-record-status status-${option.className}">${esc(option.short)}</span>`).join('') : '';
+  const visualIcon = row.details?.visualIcon || (row.details?.bodyRegion ? '🩺' : defaultVisualIcon(kind));
+  const visualColor = VISUAL_COLORS.some(item=>item.id===row.details?.visualColor) ? row.details.visualColor : defaultVisualColor(kind);
+  const editButton = row.details?.bodyRegion
+    ? `<button class="btn small ghost" data-action="edit-body-region" data-region="${esc(row.details.bodyRegion)}">身体図で編集</button>`
+    : `<button class="btn small ghost" data-action="edit-record" data-kind="${esc(kind)}" data-id="${esc(row.id)}">編集</button>`;
+  return `<article class="record visual-${visualColor} ${wishClass} ${financeCard?'income-record':''} ${row.details?.bodyRegion?'body-record':''} ${priorityCard?`priority-record ${(PRIORITY_META[row.details?.issuePriority]||PRIORITY_META['早めに']).className}`:''} ${completed?'completed':''} ${deadline?.className||''}">${completed?`<span class="completion-ribbon">✓ ${esc(completion.ribbon)}</span>`:''}<div class="record-lead"><span class="record-visual" aria-hidden="true">${esc(visualIcon)}</span><span class="record-date">${displayDate(row.date)}</span></div><div><span class="badge">${esc(financeCard?'お金':domainLabel(row.domain))}</span><h3>${esc(row.title)}</h3>${priorityCard?priorityBadgeHtml(row):''}${incomeAmountHtml}<p>${esc(row.body)}</p>${progress!==null?`<div class="progress" title="進捗 ${progress}%"><i style="width:${Math.max(0,Math.min(100,progress))}%"></i></div>`:''}<div class="record-meta">${bodyStatusBadges}${deadline?`<span class="deadline-badge ${deadline.className}">⚠ ${esc(deadline.label)}・期限 ${displayDate(row.details.dueDate)}</span>`:''}${row.details?.incomeType?`<span class="badge income-type-tag">${esc(row.details.incomeType)}</span>`:''}${row.details?.sourceName?`<span class="badge">収入元 ${esc(row.details.sourceName)}</span>`:''}${row.details?.incomePeriod?`<span class="badge">${esc(row.details.incomePeriod)}</span>`:''}${row.details?.incomeStatus?`<span class="badge ${row.details.incomeStatus==='見込'?'warn':row.details.incomeStatus==='確定'?'completion':''}">${esc(row.details.incomeStatus)}</span>`:''}${row.details?.amountKind?`<span class="badge">${esc(row.details.amountKind)}</span>`:''}${row.details?.expenseType?`<span class="badge expense-type-tag">${esc(row.details.expenseType)}</span>`:''}${row.details?.expensePeriod?`<span class="badge">${esc(row.details.expensePeriod)}</span>`:''}${row.details?.expenseStatus?`<span class="badge ${row.details.expenseStatus==='予定'?'warn':''}">${esc(row.details.expenseStatus)}</span>`:''}${row.details?.fixedCostType?`<span class="badge fixed-type-tag">${esc(row.details.fixedCostType)}</span>`:''}${row.details?.fixedCostFrequency?`<span class="badge">${esc(row.details.fixedCostFrequency)}</span>`:''}${row.details?.fixedCostStatus?`<span class="badge ${row.details.fixedCostStatus==='見直し候補'?'warn':''}">${esc(row.details.fixedCostStatus)}</span>`:''}${row.details?.debtType?`<span class="badge debt-type-tag">${esc(row.details.debtType)}</span>`:''}${row.details?.lenderName?`<span class="badge">借入先 ${esc(row.details.lenderName)}</span>`:''}${row.details?.monthlyPayment?`<span class="badge">毎月返済 ${incomeYen(moneyNumber(row.details.monthlyPayment))}</span>`:''}${row.details?.debtStatus?`<span class="badge ${row.details.debtStatus==='完済'?'completion':row.details.debtStatus==='返済猶予'?'warn':''}">${esc(row.details.debtStatus)}</span>`:''}${row.details?.issueCategory?`<span class="badge">${esc(row.details.issueCategory)}</span>`:''}${row.details?.issueStatus?`<span class="badge ${row.details.issueStatus==='解決済み'?'completion':row.details.issueStatus==='待ち'?'warn':''}">${esc(row.details.issueStatus)}</span>`:''}${priorityCard&&row.details?.dueDate?`<span class="deadline-badge ${(priorityDeadlineInfo(row)||{}).className||''}">期限 ${displayDate(row.details.dueDate)}${priorityDeadlineInfo(row)?` ・ ${esc(priorityDeadlineInfo(row).label)}`:''}</span>`:''}${row.details?.wishType?`<span class="badge wish-type-tag ${wishClass}">${esc(row.details.wishType)}</span>`:''}${row.details?.wishArea?`<span class="badge wish-area-tag wish-area-${wishAreaClass(row.details.wishArea)}">${esc(row.details.wishArea)}</span>`:''}${row.details?.experienceType?`<span class="badge">${esc(row.details.experienceType)}</span>`:''}${kind==='healthItem'?`<span class="badge health-type-tag">${esc(healthItemType(row))}</span>`:''}${row.details?.medicalStatus?`<span class="badge ${row.details.medicalStatus==='完了'?'completion':row.details.medicalStatus==='実施予定'?'warn':''}">${esc(row.details.medicalStatus)}</span>`:''}${row.details?.facilityWishId&&relatedMedicalPlaceName(row.details.facilityWishId)?`<span class="badge medical-facility">医療機関 ${esc(relatedMedicalPlaceName(row.details.facilityWishId))}</span>`:''}${impactBadge('身体',row.details?.physicalImpact)}${impactBadge('メンタル',row.details?.mentalImpact)}${impactBadge('収入',row.details?.incomeImpact)}${row.details?.wishStatus?`<span class="badge ${row.details.wishStatus==='実現済み'?'completion':''}">${esc(row.details.wishStatus)}</span>`:''}${row.details?.goalStatus?`<span class="badge ${row.details.goalStatus==='達成済み'?'completion':''}">${esc(row.details.goalStatus)}</span>`:''}${row.details?.priority?`<span class="badge ${row.details.priority==='高'?'warn':''}">優先度 ${esc(row.details.priority)}</span>`:''}${row.details?.frequency?`<span class="badge">${esc(row.details.frequency)}</span>`:''}${row.details?.budget?`<span class="badge">予算 ${esc(row.details.budget)}</span>`:''}${kind==='futureVision'&&row.details?.futureArea?`<span class="badge future-area">${esc(row.details.futureArea)}</span>`:''}${kind==='futureVision'&&row.details?.futureStatus?`<span class="badge future-status">${esc(row.details.futureStatus)}</span>`:''}${kind==='futureVision'&&row.details?.targetAge?`<span class="badge">目安 ${esc(row.details.targetAge)}歳</span>`:''}</div>${kind==='futureVision'?futureVisionImageHtml(attachments):''}${referenceLinksHtml(row.details,true)}${attachments.filter(file=>kind!=='futureVision'||!String(file.mimeType||'').startsWith('image/')).map(file=>`<a class="attachment-link" href="${esc(file.url)}" target="_blank" rel="noopener noreferrer">添付：${esc(file.name)}</a>`).join('')}</div><div class="record-actions">${completionButton}<button class="btn small ghost" data-action="view-record" data-kind="${esc(kind)}" data-id="${esc(row.id)}">見る</button>${editButton}<button class="btn small danger" data-action="delete-record" data-kind="${esc(kind)}" data-id="${esc(row.id)}">削除</button></div></article>`;
 }
 
 function render() {
@@ -1259,6 +1445,81 @@ function detailFieldHtml(kind, details = {}) {
   }).join('');
 }
 
+function defaultVisualIcon(kind) {
+  return ({
+    record:'📝', priorityIssue:'⚠️', goal:'🎯', habit:'🌱', wish:'⭐', futureVision:'🏆',
+    healthItem:'❤️', timeline:'📚', comparison:'🏡', product:'💡', incomeRecord:'💰',
+    expenseRecord:'🛍️', fixedCostRecord:'🏡', debtRecord:'💰', review:'🏆', simulation:'🚐'
+  })[kind] || '📝';
+}
+
+function defaultVisualColor(kind) {
+  return ({
+    priorityIssue:'red', healthItem:'red', wish:'orange', futureVision:'purple', goal:'purple',
+    habit:'green', product:'teal', incomeRecord:'green', expenseRecord:'orange',
+    fixedCostRecord:'navy', debtRecord:'red'
+  })[kind] || 'blue';
+}
+
+function visualPickerHtml(kind, details = {}) {
+  const icon = details.visualIcon || defaultVisualIcon(kind);
+  const color = VISUAL_COLORS.some(item=>item.id===details.visualColor) ? details.visualColor : defaultVisualColor(kind);
+  return `<div class="field visual-picker"><label>カードのイメージ</label><select name="detail__visualIcon" class="visual-icon-select">${VISUAL_ICONS.map(item=>`<option value="${item}" ${item===icon?'selected':''}>${item}　${item}</option>`).join('')}</select></div><div class="field visual-picker"><label>カードの色</label><select name="detail__visualColor">${VISUAL_COLORS.map(item=>`<option value="${item.id}" ${item.id===color?'selected':''}>● ${item.label}</option>`).join('')}</select></div>`;
+}
+
+function openBodyRegionDialog(regionId) {
+  const region = BODY_REGIONS.find(item => item.id === regionId);
+  if (!region) return toast('身体の部位を確認できませんでした','error');
+  const existing = bodyRegionRow(regionId);
+  const details = existing?.details || {};
+  const selected = Array.isArray(details.bodyStatuses) ? details.bodyStatuses : [];
+  const dialog = $('#bodyDialog');
+  dialog.innerHTML = `<form id="bodyRegionForm"><div class="modal-head"><div><span class="badge red">身体マップ</span><h2>${esc(region.label)}</h2></div><button class="icon-btn" type="button" data-close>×</button></div>
+    <div class="modal-body form-grid"><input type="hidden" name="regionId" value="${esc(region.id)}">
+      <div class="field full"><label>現在または過去の状態（複数選択できます）</label><div class="body-status-selector">${BODY_STATUS_OPTIONS.map(option=>`<label class="body-status-option status-${option.className}"><input type="checkbox" name="bodyStatus" value="${option.id}" ${selected.includes(option.id)?'checked':''}><span><i></i><b>${option.label}</b></span></label>`).join('')}</div></div>
+      <div class="field"><label>記録日・受診日</label><input name="date" type="date" value="${esc(existing?.date || localDateKey())}" required></div>
+      <div class="field"><label>痛み・不調の強さ 0〜10</label><input name="painLevel" type="number" min="0" max="10" value="${esc(details.painLevel ?? '')}" placeholder="例：6"></div>
+      <div class="field full"><label>病名・症状</label><input name="diagnosis" value="${esc(details.diagnosis || '')}" placeholder="例：腰部脊柱管狭窄症、右目の飛蚊症"></div>
+      <div class="field full"><label>病院・クリニック</label><input name="medicalFacility" value="${esc(details.medicalFacility || '')}" placeholder="病院名・診療科・担当医など"></div>
+      <div class="field full"><label>治療・手術の内容</label><textarea name="treatmentHistory" placeholder="治療内容、手術名、時期、結果など">${esc(details.treatmentHistory || '')}</textarea></div>
+      <div class="field full"><label>現在の症状・部位メモ</label><textarea name="bodyNotes" placeholder="いつ、どの動作で、どのように痛むかなど">${esc(details.bodyNotes || existing?.body || '')}</textarea></div>
+      <p class="body-dialog-hint field full">保存すると身体図の四角に✓と状態色が付き、PC・スマホの同期対象になります。</p>
+    </div><div class="modal-actions">${existing?`<button class="btn danger" type="button" data-action="clear-body-region" data-region="${esc(region.id)}">この部位の記録を消す</button>`:''}<button class="btn ghost" type="button" data-close>キャンセル</button><button class="btn" type="submit">${existing?'更新する':'保存する'}</button></div></form>`;
+  dialog.showModal();
+  dialog.querySelectorAll('[data-close]').forEach(button => button.onclick=()=>dialog.close());
+  dialog.querySelector('#bodyRegionForm').addEventListener('submit', async event => {
+    event.preventDefault();
+    const submit = event.submitter;
+    const form = event.currentTarget;
+    const statuses = [...form.querySelectorAll('[name="bodyStatus"]:checked')].map(input => input.value);
+    if (!statuses.length) return toast('「痛み・治療・手術・経過観察」から1つ以上選んでください','error');
+    if (submit) { submit.disabled=true; submit.textContent='保存中…'; }
+    const data = Object.fromEntries(new FormData(form));
+    const now = isoNow();
+    const statusLabels = statuses.map(id => bodyStatus(id)?.short).filter(Boolean);
+    const nextDetails = {
+      ...(existing?.details || {}), healthItemType:'症状・健康管理',
+      bodyRegion:region.id, bodyRegionLabel:region.label, bodyView:region.view,
+      bodyStatuses:statuses, painLevel:String(data.painLevel || ''), diagnosis:String(data.diagnosis || '').trim(),
+      medicalFacility:String(data.medicalFacility || '').trim(), treatmentHistory:String(data.treatmentHistory || '').trim(),
+      bodyNotes:String(data.bodyNotes || '').trim(), visualIcon:'🩺',
+      visualColor:statuses.includes('pain')?'red':statuses.includes('surgery')?'purple':statuses.includes('treatment')?'blue':'green'
+    };
+    const record = normalizeRecord({
+      ...(existing || {}), id:existing?.id || `bodymap_${region.id}`, kind:'healthItem', domain:'health',
+      title:`${region.label}｜${statusLabels.join('・')}`, body:nextDetails.bodyNotes || nextDetails.diagnosis || '身体マップに登録',
+      tags:['身体マップ',region.label,...statusLabels], date:data.date, status:'active', deletedAt:null,
+      details:nextDetails, updatedAt:now, createdAt:existing?.createdAt || now
+    },'healthItem');
+    const index = state.healthItems.findIndex(row => row.id === record.id);
+    if (index >= 0) state.healthItems[index] = record;
+    else state.healthItems.push(record);
+    await commit(state,`${region.label}の身体マップを保存しました`);
+    dialog.close();
+    render();
+  });
+}
+
 function openRecordDialog(kind, id = '', preset = {}) {
   const key = collectionFor(kind);
   if (!key) return toast('未対応の記録種類です','error');
@@ -1296,7 +1557,7 @@ function openRecordDialog(kind, id = '', preset = {}) {
     : `<div class="field"><label>関連する分野</label><select name="domain">${DOMAINS.map(domain=>`<option value="${domain.id}" ${selectedDomain===domain.id?'selected':''}>${domain.label}</option>`).join('')}</select></div>`;
   const existingLinks = normalizeReferenceLinks(existing?.details || {});
   const editorLinks = existingLinks.length ? existingLinks : (preset.referenceLinks?.length ? preset.referenceLinks : [{}]);
-  dialog.innerHTML = `<form id="recordForm"><div class="modal-head"><div><span class="badge">${existing?'編集':'新規'}</span><h2>${esc(KIND_LABELS[kind])}</h2></div><button class="icon-btn" type="button" data-close>×</button></div><div class="modal-body form-grid"><input type="hidden" name="kind" value="${kind}"><div class="field"><label>日付</label><input name="date" type="date" value="${esc(existing?.date || preset.date || localDateKey())}" required></div>${domainField}<div class="field full"><label>${titleLabel}</label><input name="title" value="${esc(existing?.title || preset.title || '')}" required placeholder="${titlePlaceholder}"></div><div class="field full"><label>${bodyLabel}</label><textarea name="body" placeholder="${bodyPlaceholder}">${esc(existing?.body || preset.body || '')}</textarea></div>${profileReferenceHtml(kind,{context:'editor'})}${detailFieldHtml(kind,seedDetails)}<div class="field full reference-links-field"><label>${urlLabel}（最大${MAX_REFERENCE_LINKS}件）</label><div id="referenceLinkRows" class="reference-link-editor">${editorLinks.map(referenceLinkEditorRow).join('')}</div><button class="btn small secondary add-reference" type="button" data-add-reference>＋ リンクを追加</button><span class="hint">公式サイト・SNS・YouTube・地図・予約／購入ページなど。名前は自由、https://は省略できます。</span></div><div class="field full"><label>タグ</label><input name="tags" value="${esc((existing?.tags||[]).join('、'))}" placeholder="${FINANCE_RECORD_KINDS.has(kind)?'医療、生活、事業、返済 など':kind==='priorityIssue'?'緊急、手続き、医療、家族 など':kind==='habit'?'食事、ウォーキング、睡眠 など':'健康、挑戦、家族 など'}"></div><div class="field full duplicate-editor-slot" id="duplicateEditorSlot" hidden></div><div class="field full"><label>${kind==='futureVision'?'理想イメージ画像／添付':FINANCE_RECORD_KINDS.has(kind)?'明細・契約書画像／添付':'画像・添付'}（任意・8MB以下）</label><input name="attachment" type="file" ${kind==='futureVision'?'accept="image/*" multiple':''}><span class="hint">${kind==='futureVision'?'ChatGPTなどの画像生成AIで作った理想イメージも添付できます。画像はGoogle Driveへ保存し、このカードから参照します。':'添付はGoogle Driveへ保存します。同期設定が必要です。'}</span></div><p class="mobile-sheet-note field full">下へスクロールすると保存ボタンがあります。</p></div><div class="modal-actions"><button class="btn ghost" type="button" data-close>キャンセル</button><button class="btn" type="submit">${existing?'更新する':'保存する'}</button></div></form>`;
+  dialog.innerHTML = `<form id="recordForm"><div class="modal-head"><div><span class="badge">${existing?'編集':'新規'}</span><h2>${esc(KIND_LABELS[kind])}</h2></div><button class="icon-btn" type="button" data-close>×</button></div><div class="modal-body form-grid"><input type="hidden" name="kind" value="${kind}"><div class="field"><label>日付</label><input name="date" type="date" value="${esc(existing?.date || preset.date || localDateKey())}" required></div>${domainField}<div class="field full"><label>${titleLabel}</label><input name="title" value="${esc(existing?.title || preset.title || '')}" required placeholder="${titlePlaceholder}"></div>${visualPickerHtml(kind,seedDetails)}<div class="field full"><label>${bodyLabel}</label><textarea name="body" placeholder="${bodyPlaceholder}">${esc(existing?.body || preset.body || '')}</textarea></div>${profileReferenceHtml(kind,{context:'editor'})}${detailFieldHtml(kind,seedDetails)}<div class="field full reference-links-field"><label>${urlLabel}（最大${MAX_REFERENCE_LINKS}件）</label><div id="referenceLinkRows" class="reference-link-editor">${editorLinks.map(referenceLinkEditorRow).join('')}</div><button class="btn small secondary add-reference" type="button" data-add-reference>＋ リンクを追加</button><span class="hint">公式サイト・SNS・YouTube・地図・予約／購入ページなど。名前は自由、https://は省略できます。</span></div><div class="field full"><label>タグ</label><input name="tags" value="${esc((existing?.tags||[]).join('、'))}" placeholder="${FINANCE_RECORD_KINDS.has(kind)?'医療、生活、事業、返済 など':kind==='priorityIssue'?'緊急、手続き、医療、家族 など':kind==='habit'?'食事、ウォーキング、睡眠 など':'健康、挑戦、家族 など'}"></div><div class="field full duplicate-editor-slot" id="duplicateEditorSlot" hidden></div><div class="field full"><label>${kind==='futureVision'?'理想イメージ画像／添付':FINANCE_RECORD_KINDS.has(kind)?'明細・契約書画像／添付':'画像・添付'}（任意・8MB以下）</label><input name="attachment" type="file" ${kind==='futureVision'?'accept="image/*" multiple':''}><span class="hint">${kind==='futureVision'?'ChatGPTなどの画像生成AIで作った理想イメージも添付できます。画像はGoogle Driveへ保存し、このカードから参照します。':'添付はGoogle Driveへ保存します。同期設定が必要です。'}</span></div><p class="mobile-sheet-note field full">下へスクロールすると保存ボタンがあります。</p></div><div class="modal-actions"><button class="btn ghost" type="button" data-close>キャンセル</button><button class="btn" type="submit">${existing?'更新する':'保存する'}</button></div></form>`;
   dialog.showModal();
   dialog.querySelectorAll('[data-close]').forEach(button => button.onclick=()=>dialog.close());
   const linkRows = dialog.querySelector('#referenceLinkRows');
@@ -1443,6 +1704,7 @@ function openRecordDialog(kind, id = '', preset = {}) {
 
 function detailDisplayValue(key, value) {
   if (key === 'facilityWishId') return relatedMedicalPlaceName(value) || value;
+  if (key === 'bodyStatuses') return (Array.isArray(value)?value:[]).map(id=>bodyStatus(id)?.label||id).join('・');
   if (['amount','originalAmount','remainingBalance','monthlyPayment'].includes(key) && String(value).trim() !== '') return incomeYen(moneyNumber(value));
   if (key === 'interestRate' && String(value).trim() !== '') return `${value}%`;
   return value;
@@ -1464,14 +1726,15 @@ function showRecord(kind,id) {
   const row = state[collectionFor(kind)]?.find(item=>item.id===id);
   if (!row) return;
   const links = normalizeReferenceLinks(row.details || {});
-  const detailRows = Object.entries(row.details || {}).filter(([key,value]) => value && !['attachments','referenceUrl','referenceLinks'].includes(key)).map(([key,value])=>`<div class="detail-row"><small>${esc(DETAIL_LABELS[key]||key)}</small><p>${esc(detailDisplayValue(key,value))}</p></div>`).join('');
+  const hiddenDetails = ['attachments','referenceUrl','referenceLinks','bodyRegion','bodyView','visualIcon','visualColor'];
+  const detailRows = Object.entries(row.details || {}).filter(([key,value]) => value && !hiddenDetails.includes(key)).map(([key,value])=>`<div class="detail-row"><small>${esc(DETAIL_LABELS[key]||key)}</small><p>${esc(detailDisplayValue(key,value))}</p></div>`).join('');
   const attachments = (row.details?.attachments || []).map(file=>`<a class="attachment-link" href="${esc(file.url)}" target="_blank" rel="noopener noreferrer">${esc(file.name)}</a>`).join('');
   const dialog = $('#detailDialog');
   const linkDetails = links.length ? `<div class="detail-row"><small>関連URL（${links.length}件）</small><div class="reference-links detail-links">${links.map(link => `<div><a class="reference-link" href="${esc(link.url)}" target="_blank" rel="noopener noreferrer">↗ ${esc(link.label)}</a><p class="url-text">${esc(link.url)}</p></div>`).join('')}</div></div>` : '';
   dialog.innerHTML = `<div class="modal-head"><div><span class="badge">${esc(KIND_LABELS[kind]||kind)}</span><h2>${esc(row.title)}</h2></div><button class="icon-btn" data-close>×</button></div><div class="modal-body"><div class="detail-grid"><div class="detail-row"><small>日付・分野</small><p>${displayDate(row.date)} ／ ${esc(domainLabel(row.domain))}</p></div>${row.body?`<div class="detail-row"><small>概要・メモ</small><p>${esc(row.body)}</p></div>`:''}${profileReferenceHtml(kind,{context:'detail'})}${linkDetails}${detailRows}${attachments?`<div class="detail-row"><small>添付</small>${attachments}</div>`:''}</div></div><div class="modal-actions"><button class="btn ghost" data-close>閉じる</button><button class="btn" data-action="edit-from-detail" data-kind="${esc(kind)}" data-id="${esc(id)}">編集する</button></div>`;
   dialog.showModal();
   dialog.querySelectorAll('[data-close]').forEach(button=>button.onclick=()=>dialog.close());
-  dialog.querySelector('[data-action="edit-from-detail"]').onclick=()=>{dialog.close();openRecordDialog(kind,id)};
+  dialog.querySelector('[data-action="edit-from-detail"]').onclick=()=>{dialog.close();row.details?.bodyRegion?openBodyRegionDialog(row.details.bodyRegion):openRecordDialog(kind,id)};
 }
 
 function currentScopes(channel) {
@@ -1542,6 +1805,23 @@ function exportGptArtifact(type) {
 
 async function handleAction(action, element) {
   try {
+    if (action === 'scroll-body-map') {
+      document.getElementById('human-body-chart')?.scrollIntoView({behavior:'smooth',block:'start'});
+      return;
+    }
+    if (action === 'edit-body-region') return openBodyRegionDialog(element.dataset.region);
+    if (action === 'clear-body-region') {
+      const region = BODY_REGIONS.find(item => item.id === element.dataset.region);
+      const row = bodyRegionRow(element.dataset.region);
+      if (row && region && confirm(`${region.label}の身体マップ記録を消しますか？`)) {
+        row.deletedAt=isoNow();
+        row.updatedAt=isoNow();
+        await commit(state,`${region.label}の身体マップ記録を消しました`);
+        $('#bodyDialog')?.close();
+        render();
+      }
+      return;
+    }
     if (action === 'new-record') {
       const details = {};
       if (element.dataset.healthType) details.healthItemType = element.dataset.healthType;
@@ -1803,11 +2083,11 @@ async function registerServiceWorker() {
   if (!('serviceWorker' in navigator)) return;
   const hadController = Boolean(navigator.serviceWorker.controller);
   try {
-    const registration = await navigator.serviceWorker.register('./sw.js?v=3.5.0', { updateViaCache:'none' });
+    const registration = await navigator.serviceWorker.register('./sw.js?v=3.6.1', { updateViaCache:'none' });
     await registration.update();
     if (hadController) {
       navigator.serviceWorker.addEventListener('controllerchange',()=>{
-        const refreshKey='life-compass-sw-refresh-v3.5.0';
+        const refreshKey='life-compass-sw-refresh-v3.6.1';
         if(sessionStorage.getItem(refreshKey))return;
         sessionStorage.setItem(refreshKey,'1');
         location.reload();
