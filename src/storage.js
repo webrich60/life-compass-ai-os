@@ -286,21 +286,99 @@ export async function testConnection(gasUrl, token) {
   return { ok: true, revision: Number(state.meta?.revision || 0) };
 }
 
+const MAX_ATTACHMENT_BYTES = 8 * 1024 * 1024;
+const MAX_IMAGE_SOURCE_BYTES = 20 * 1024 * 1024;
+const IMAGE_MAX_EDGE = 1280;
+const IMAGE_TARGET_BYTES = 480 * 1024;
+
+function imageFileName(name = 'image') {
+  const base = String(name).replace(/\.[^.]+$/, '') || 'image';
+  return `${base}-compressed.webp`;
+}
+
+function canvasToBlob(canvas, type, quality) {
+  return new Promise((resolve, reject) => canvas.toBlob(
+    blob => blob ? resolve(blob) : reject(new Error('画像の圧縮に失敗しました')),
+    type,
+    quality
+  ));
+}
+
+async function decodeImage(file) {
+  if (typeof createImageBitmap === 'function') return createImageBitmap(file);
+  const url = URL.createObjectURL(file);
+  try {
+    return await new Promise((resolve, reject) => {
+      const image = new Image();
+      image.onload = () => resolve(image);
+      image.onerror = () => reject(new Error('この画像形式を端末で読み込めませんでした'));
+      image.src = url;
+    });
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+}
+
+/** アップロード前に画像を縮小・WebP化し、通信量とDrive使用量を抑える。 */
+export async function compressImageForUpload(file) {
+  const type = String(file?.type || '').toLowerCase();
+  if (!type.startsWith('image/') || /(?:gif|svg)/.test(type)) return file;
+  if (file.size > MAX_IMAGE_SOURCE_BYTES) throw new Error('画像は圧縮前20MB以下にしてください');
+
+  let source;
+  try {
+    source = await decodeImage(file);
+    const sourceWidth = Number(source.width || source.naturalWidth || 0);
+    const sourceHeight = Number(source.height || source.naturalHeight || 0);
+    if (!sourceWidth || !sourceHeight) throw new Error('画像の縦横サイズを確認できませんでした');
+    const initialScale = Math.min(1, IMAGE_MAX_EDGE / Math.max(sourceWidth, sourceHeight));
+    let width = Math.max(1, Math.round(sourceWidth * initialScale));
+    let height = Math.max(1, Math.round(sourceHeight * initialScale));
+    let quality = 0.78;
+    let blob;
+
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      const canvas = document.createElement('canvas');
+      canvas.width = width;
+      canvas.height = height;
+      const context = canvas.getContext('2d', { alpha: true });
+      if (!context) throw new Error('画像圧縮機能を使用できませんでした');
+      context.drawImage(source, 0, 0, width, height);
+      blob = await canvasToBlob(canvas, 'image/webp', quality);
+      if (blob.size <= IMAGE_TARGET_BYTES) break;
+      quality = Math.max(0.52, quality - 0.08);
+      width = Math.max(1, Math.round(width * 0.86));
+      height = Math.max(1, Math.round(height * 0.86));
+    }
+
+    if (!blob || blob.size >= file.size) return file;
+    return new File([blob], imageFileName(file.name), { type:'image/webp', lastModified:Date.now() });
+  } catch (error) {
+    // HEICなど端末で変換できない形式も、8MB以下なら従来どおり保存できる。
+    if (file.size <= MAX_ATTACHMENT_BYTES) return file;
+    throw error;
+  } finally {
+    if (source && typeof source.close === 'function') source.close();
+  }
+}
+
 export async function uploadAttachment(state, file) {
   if (!state.settings.gasUrl || !state.settings.syncToken) throw new Error('添付には同期URLと同期トークンが必要です');
-  if (file.size > 8 * 1024 * 1024) throw new Error('添付は1ファイル8MB以下にしてください');
+  const originalSize = file.size;
+  const uploadFile = await compressImageForUpload(file);
+  if (uploadFile.size > MAX_ATTACHMENT_BYTES) throw new Error('圧縮後も8MBを超えています。画像を小さくして再度お試しください');
   const base64 = await new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = () => resolve(String(reader.result));
     reader.onerror = () => reject(new Error('添付ファイルを読み込めませんでした'));
-    reader.readAsDataURL(file);
+    reader.readAsDataURL(uploadFile);
   });
   const res = await fetch(state.settings.gasUrl, {
     method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, redirect: 'follow',
-    body: JSON.stringify({ action: 'upload', token: state.settings.syncToken, fileName: file.name, mimeType: file.type, base64 })
+    body: JSON.stringify({ action: 'upload', token: state.settings.syncToken, fileName: uploadFile.name, mimeType: uploadFile.type, base64 })
   });
   if (!res.ok) throw new Error(`添付の保存に失敗しました（${res.status}）`);
   const json = await res.json();
   if (!json.ok) throw new Error(json.error || '添付を保存できませんでした');
-  return { fileId: json.fileId, name: json.name, url: json.url, previewUrl: json.previewUrl || json.url, mimeType: file.type, size: file.size, uploadedAt: isoNow() };
+  return { fileId: json.fileId, name: json.name, url: json.url, previewUrl: json.previewUrl || json.url, mimeType: uploadFile.type, size: uploadFile.size, originalSize, compressed:uploadFile.size < originalSize, uploadedAt: isoNow() };
 }

@@ -405,6 +405,7 @@ button:disabled{cursor:wait;opacity:.58}
 .future-image-strip{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:8px;margin:11px 0}
 .future-image-strip a{display:block;border:1px solid #c9d7eb;border-radius:14px;overflow:hidden;background:#f5f8fc;text-decoration:none;color:var(--ink)}
 .future-image-strip img{width:100%;aspect-ratio:16/10;object-fit:cover;display:block;background:#e7eef7}.future-image-strip span{display:block;padding:6px 8px;font-size:11px;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.wish-image-strip{grid-template-columns:repeat(auto-fit,minmax(150px,220px));margin-top:13px}.wish-image-strip a{border:2px solid rgba(21,88,176,.24);box-shadow:0 5px 14px rgba(18,65,128,.10)}.wish-image-strip img{aspect-ratio:4/3}.detail-image-strip{grid-template-columns:repeat(auto-fit,minmax(180px,280px));margin:8px 0 12px}.detail-image-strip img{aspect-ratio:4/3}
 .future-record-list .record{border:1px solid #bdcae7;background:linear-gradient(145deg,#fff,#f7f9ff)}
 .badge.future-area{background:#eaf1ff;color:#285499}.badge.future-status{background:#f1ecff;color:#6b45a2}
 .future-principle,.future-life-teaser{border:2px solid #a9bde7;border-radius:20px;background:linear-gradient(145deg,#f9fbff,#eef3ff);padding:20px;margin:18px 0}
@@ -422,7 +423,7 @@ button:disabled{cursor:wait;opacity:.58}
 @media(max-width:560px){.future-horizon-meter{grid-template-columns:48px 1fr 48px}.future-horizon-meter b{font-size:20px}.future-image-strip{grid-template-columns:1fr}.future-area-summary{grid-template-columns:1fr 1fr}.future-life-teaser .btn-row{display:grid;grid-template-columns:1fr}.future-life-teaser .btn{width:100%}}
 .dashboard-future{--dashboard-accent:#5c72c7}
 
-/* v3.6.2: 人型カルテ・人生ゲームボード・カードのグラフィック化 */
+/* v3.6.3: 欲しいもの・行きたい場所の画像表示と自動圧縮 */
 .record{--visual:#1769d8;border-left:5px solid var(--visual)}
 .record.visual-green{--visual:#218456}.record.visual-purple{--visual:#7041be}.record.visual-orange{--visual:#c86c09}.record.visual-pink{--visual:#c9326b}.record.visual-red{--visual:#c9323e}.record.visual-teal{--visual:#087d72}.record.visual-navy{--visual:#173e70}
 .record-lead{display:grid;justify-items:start;gap:7px}.record-visual{width:52px;height:52px;border:3px solid var(--visual);border-radius:17px;background:#fff;display:grid;place-items:center;font-size:27px;box-shadow:0 5px 13px color-mix(in srgb,var(--visual) 18%,transparent)}.visual-icon-select{font-size:23px!important}.visual-picker select{min-height:51px}
