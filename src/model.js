@@ -14,6 +14,8 @@ export const DEFAULT_LINE_SCOPES = {
 export const WISH_TYPES = ['欲しいもの', '行きたい場所', 'やってみたいこと・挑戦・体験'];
 export const WISH_AREAS = ['一般', '健康・身体', '医療', 'メンタル', '仕事・収入', '家族', 'その他'];
 export const EXPERIENCE_TYPES = ['挑戦・成長', '趣味・体験', '人生で一度は'];
+export const PLACE_CATEGORIES = ['観光・旅行', '旅館・ホテル', '温泉・入浴', '飲食店・カフェ', '買い物', '医療機関', 'イベント・体験施設', 'その他'];
+export const ACCOMMODATION_TYPES = ['旅館', 'ホテル', '温泉旅館', 'リゾートホテル', '民宿・ペンション', 'キャンプ・グランピング', 'その他'];
 
 export const FUTURE_LIFE_AREAS = ['健康','収入・お金','仕事・事業','家族','住宅・住環境','ライフスタイル','人間関係','学び','趣味・楽しみ','生き方・価値観','その他'];
 export const FUTURE_LIFE_STATUSES = ['方向性を考える','目指している','少し近づいた','かなり近づいた','実現している'];
@@ -40,7 +42,7 @@ export const DOMAINS = [
   { id: 'work', label: '仕事', icon: 'briefcase', color: '#4f6bed' },
   { id: 'income', label: '収入', icon: 'wallet', color: '#d99000' },
   { id: 'freedom', label: '自由', icon: 'compass', color: '#8b5cf6' },
-  { id: 'happiness', label: '幸福', icon: 'sparkles', color: '#e96a8d' },
+  { id: 'happiness', label: '楽しみ・幸福', icon: 'sparkles', color: '#e96a8d' },
   { id: 'family', label: '家族', icon: 'users', color: '#e56b3f' },
   { id: 'challenge', label: '挑戦', icon: 'mountain', color: '#2878b5' },
   { id: 'learning', label: '学び', icon: 'book-open', color: '#697386' }
@@ -137,6 +139,11 @@ export function createEmptyState() {
       gasUrl: '', syncToken: '', syncEnabled: false, autoSync: true,
       theme: 'light', fontScale: 1,
       installPromptDismissed: false,
+      medicalWatch: {
+        enabled: true, autoRefresh: true, refreshDays: 7,
+        selected: ['keratoconus','corneal_transplant_lens','scleral_lens','lumbar_spine'],
+        customTopics: [], lastCheckedAt: '', results: [], error: ''
+      },
       integrations: {
         line: {
           enabled: false, connected: false, provider: 'gemini', saveHistory: true,
@@ -170,6 +177,14 @@ export function normalizeRecord(input = {}, kind = 'record') {
   const tags = Array.isArray(input.tags) ? input.tags.map(String).filter(Boolean)
     : String(input.tags || '').split(/[,、\n]/).map(x => x.trim()).filter(Boolean);
   const details = input.details && typeof input.details === 'object' ? { ...input.details } : {};
+  if (kind === 'wish' && details.wishType === '行きたい場所') {
+    const legacyPlaceCategories = {
+      '旅行先・地域': '観光・旅行',
+      '観光・景勝地': '観光・旅行',
+      '宿泊': '旅館・ホテル'
+    };
+    if (legacyPlaceCategories[details.placeCategory]) details.placeCategory = legacyPlaceCategories[details.placeCategory];
+  }
   const referenceLinks = normalizeReferenceLinks(details, input.referenceUrl || input.linkUrl || '');
   if (referenceLinks.length) {
     details.referenceLinks = referenceLinks;
@@ -207,6 +222,22 @@ export function normalizeState(raw = {}) {
       ...base.settings, ...(raw.settings || {}),
       theories: { ...base.settings.theories, ...(raw.settings?.theories || {}) }
     }
+  };
+  const incomingMedicalWatch = raw.settings?.medicalWatch || {};
+  state.settings.medicalWatch = {
+    ...base.settings.medicalWatch,
+    ...incomingMedicalWatch,
+    selected: Array.isArray(incomingMedicalWatch.selected)
+      ? incomingMedicalWatch.selected.map(String).filter(Boolean)
+      : [...base.settings.medicalWatch.selected],
+    results: Array.isArray(incomingMedicalWatch.results)
+      ? incomingMedicalWatch.results.filter(item => item && typeof item === 'object').slice(0, 60)
+      : [],
+    customTopics: Array.isArray(incomingMedicalWatch.customTopics)
+      ? incomingMedicalWatch.customTopics.filter(item => item && typeof item === 'object')
+        .map(item => ({ id:String(item.id || ''), label:String(item.label || '').slice(0,60), query:String(item.query || '').slice(0,140) }))
+        .filter(item => /^custom_[a-zA-Z0-9_-]+$/.test(item.id) && item.label).slice(0, 20)
+      : []
   };
   const incomingIntegrations = raw.settings?.integrations || {};
   state.settings.integrations = {
@@ -283,7 +314,20 @@ export function normalizeState(raw = {}) {
       state.goals = state.goals.filter(row => !movedIds.has(row.id));
     }
   }
-  state.aiHistory = Array.isArray(raw.aiHistory) ? raw.aiHistory.slice(-100) : [];
+  state.aiHistory = Array.isArray(raw.aiHistory)
+    ? raw.aiHistory
+      .filter(item => item && typeof item === 'object')
+      .map((item, index) => ({
+        ...item,
+        id: String(item.id || `ai_legacy_${index}`),
+        persona: String(item.persona || item.provider || ''),
+        provider: String(item.provider || ''),
+        question: String(item.question || item.prompt || ''),
+        answer: String(item.answer ?? item.response ?? item.content ?? item.text ?? ''),
+        createdAt: String(item.createdAt || item.updatedAt || base.meta.createdAt)
+      }))
+      .slice(-100)
+    : [];
   state.schemaVersion = SCHEMA_VERSION;
   return state;
 }
@@ -315,7 +359,7 @@ export function localDateKey(date = new Date()) {
 }
 
 export function activeRows(rows = []) {
-  return rows.filter(row => !row.deletedAt);
+  return Array.isArray(rows) ? rows.filter(row => row && !row.deletedAt) : [];
 }
 
 export function reviewDue(state, period, now = new Date()) {

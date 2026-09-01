@@ -264,3 +264,51 @@ export function buildUniversalAIContextJson(state, scopes = {}) {
 export function buildUniversalAIStarterPrompt() {
   return `添付した「Life Compass Universal AI Context Pack」を、私に関する現在の正本コンテキストとして参照してください。\n\n回答では、登録された事実・私の希望・あなたの推測を区別してください。私が望みそうな結論へ寄せず、良いものは根拠とともに良い、問題があるものは理由とともに問題があると評価してください。\n\n特に「これから作る理想の人生」を方向の基準にしつつ、最優先課題、年齢、健康・医療、収入・支出・固定費・負債、家族、期限を現実条件として同時に見てください。80歳は寿命予測ではなく計画上の仮の時間軸です。完全実現が難しい場合は、理想を捨てるのではなく、近づける部分・代替案・今やる一歩を示してください。`;
 }
+
+const LIFE_ASSET_SECRET_KEY = /^(?:apiKey|syncToken|gasUrl|spreadsheetId|accessToken|refreshToken|authorization)$/i;
+
+function portableValue(value) {
+  if (Array.isArray(value)) return value.map(portableValue);
+  if (!value || typeof value !== 'object') return value;
+  return Object.fromEntries(Object.entries(value)
+    .filter(([key]) => !LIFE_ASSET_SECRET_KEY.test(key))
+    .map(([key, item]) => [key, portableValue(item)]));
+}
+
+/**
+ * Life Compassを正本にした「WEBRIC人生戦略ツール」専用プロフィールデータ。
+ * 利用者の意図どおり、欲しいもの・やりたいこと等の各コレクションは収録しない。
+ */
+export function buildLifeAssetStudioExport(state = {}) {
+  const profile = portableValue(state.profile || {});
+  delete profile.fieldUpdatedAt;
+
+  return {
+    format: 'LifeCompassToLifeAssetStudio',
+    version: '1.0',
+    exportedAt: isoNow(),
+    source: {
+      app: 'Life Compass AI OS', appVersion: '3.7.1',
+      schemaVersion: Number(state.schemaVersion || 0),
+      stateId: String(state.meta?.id || ''), revision: Number(state.meta?.revision || 0),
+      updatedAt: String(state.meta?.updatedAt || '')
+    },
+    destination: {
+      app: 'WEBRIC人生戦略ツール',
+      acceptedAlias: '人生資産化戦略ツール', importMode: 'merge', identityKey: 'id'
+    },
+    dataPolicy: {
+      sourceOfTruth: 'Life Compass AI OS', containsSensitivePersonalData: true,
+      included: ['プロフィール入力内容'],
+      excluded: ['欲しいもの', '行きたい場所', 'やりたいこと', '目標', '習慣', '理想の未来', '健康カード', '収支', '事業', 'AI履歴', 'APIキー', 'GAS URL', '同期トークン', 'スプレッドシートID', '画面・端末設定'],
+      notice: '本人専用の移行ファイルとして扱い、公開場所へ置かないでください。'
+    },
+    importHints: {
+      repeatedImport: '同じidは新規追加せず統合する',
+      conflictRule: '更新日時が新しい値を優先し、空欄で既存値を消さない',
+      factsRule: '登録事実・本人の希望・AIの推測を区別する',
+      planningHorizon: '80歳は寿命予測ではなく、理想へ近づき人生を楽しむための仮の計画時間軸'
+    },
+    profile
+  };
+}

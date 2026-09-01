@@ -5,6 +5,7 @@ export const SETTINGS_KEY = 'life_compass_ai_os_settings_v1';
 export const DB_NAME = 'life_compass_ai_os';
 export const DB_STORE = 'state';
 export const DB_STATE_KEY = 'main';
+const LEGACY_FALLBACK_LIMIT_BYTES = 1_500_000;
 
 function readLocalJson(key) {
   try {
@@ -52,6 +53,40 @@ async function writeDatabaseState(state) {
   } finally { db.close(); }
 }
 
+function waitForRetry(delay = 90) {
+  return new Promise(resolve => setTimeout(resolve, delay));
+}
+
+function storageErrorMessage(error) {
+  const name = String(error?.name || '');
+  const message = String(error?.message || '');
+  if (/quota|space|容量/i.test(`${name} ${message}`)) {
+    return 'スマホの保存容量が不足しています。クラウド同期またはJSONバックアップを確認してから、ブラウザの不要なサイトデータを整理してください。';
+  }
+  if (/private|security|denied|notallowed/i.test(`${name} ${message}`)) {
+    return 'スマホのブラウザが端末保存を許可していません。プライベートモードを終了し、通常の画面で開いてください。';
+  }
+  return 'スマホの端末保存が一時的に失敗しました。画面を閉じずにもう一度保存してください。クラウド接続中はクラウド保存へ自動で切り替えます。';
+}
+
+async function writeAndVerifyDatabaseState(state) {
+  let lastError = null;
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    try {
+      await writeDatabaseState(state);
+      const verified = await readDatabaseState();
+      if (!verified || Number(verified?.meta?.revision) !== Number(state?.meta?.revision)) {
+        throw new Error('IndexedDB verification failed');
+      }
+      return;
+    } catch (error) {
+      lastError = error;
+      if (attempt === 0) await waitForRetry();
+    }
+  }
+  throw lastError || new Error('IndexedDB write failed');
+}
+
 async function deleteDatabaseState() {
   const db = await openDatabase();
   try {
@@ -90,7 +125,9 @@ export async function loadCache() {
 
   // v2.1.2以前の全量localStorageを、初回起動時に容量の大きいIndexedDBへ自動移行する。
   try {
-    await writeDatabaseState(next);
+    // iOS系ブラウザでは、バックグラウンド復帰直後にIndexedDBのトランザクションが
+    // 一度だけ失敗することがある。再試行し、読み返しまで成功した時だけ保存完了とする。
+    await writeAndVerifyDatabaseState(next);
     mirrorLightSettings(next.settings);
     removeLegacyFullCache();
   } catch (_) {
@@ -100,22 +137,47 @@ export async function loadCache() {
 }
 
 export async function saveCache(state, { touch = true } = {}) {
-  const next = touch ? touchState(state) : normalizeState(state);
+  // 旧スマホ版や部分更新されたキャッシュが混ざっていても、保存のたびに
+  // 現行スキーマへ整えてから画面へ返す。欠けた配列・AI履歴を残さない。
+  const normalized = normalizeState(state);
+  const next = touch ? touchState(normalized) : normalized;
   try {
-    await writeDatabaseState(next);
+    await writeAndVerifyDatabaseState(next);
     mirrorLightSettings(next.settings);
     removeLegacyFullCache();
     return next;
   } catch (databaseError) {
-    // 古いブラウザ向けの最終フォールバック。通常はIndexedDBが使用される。
+    // 古いブラウザ向けの最終フォールバック。大きな本体データを容量の小さい
+    // localStorageへ戻すとスマホの容量エラーが再発するため、小規模データだけに限定する。
     try {
       if (typeof localStorage === 'undefined') throw databaseError;
-      localStorage.setItem(CACHE_KEY, JSON.stringify(next));
+      const serialized = JSON.stringify(next);
+      if (new Blob([serialized]).size > LEGACY_FALLBACK_LIMIT_BYTES) throw databaseError;
+      localStorage.setItem(CACHE_KEY, serialized);
       localStorage.setItem(SETTINGS_KEY, JSON.stringify(next.settings));
       return next;
-    } catch (_) {
-      throw new Error('この端末への保存に失敗しました。JSONバックアップは削除せず、ブラウザのプライベートモードを終了してから再度お試しください。');
+    } catch (fallbackError) {
+      const error = new Error(storageErrorMessage(fallbackError || databaseError));
+      error.name = 'LifeCompassStorageError';
+      error.storageCause = databaseError;
+      throw error;
     }
+  }
+}
+
+export async function storageStatus() {
+  let usage = null;
+  let quota = null;
+  try {
+    const estimate = await globalThis.navigator?.storage?.estimate?.();
+    usage = Number.isFinite(Number(estimate?.usage)) ? Number(estimate.usage) : null;
+    quota = Number.isFinite(Number(estimate?.quota)) ? Number(estimate.quota) : null;
+  } catch (_) { /* 容量表示に非対応でも保存処理は継続する。 */ }
+  try {
+    const stored = await readDatabaseState();
+    return { ok: Boolean(stored), engine: 'IndexedDB', usage, quota };
+  } catch (error) {
+    return { ok: false, engine: 'IndexedDB', usage, quota, error: storageErrorMessage(error) };
   }
 }
 
@@ -281,104 +343,54 @@ export async function refreshNotebookLMSheets(state) {
   return json;
 }
 
+export async function fetchMedicalUpdates(state, topics = [], customTopics = []) {
+  const gasUrl = state?.settings?.gasUrl || '';
+  const token = state?.settings?.syncToken || '';
+  if (!gasUrl) throw new Error('医療情報の確認には、設定画面でGAS同期URLを登録してください');
+  if (!token) throw new Error('医療情報の確認には、設定画面で同期トークンを登録してください');
+  const selected = Array.isArray(topics) ? topics.map(String).filter(Boolean).slice(0, 8) : [];
+  if (!selected.length) throw new Error('確認したい医療テーマを1つ以上選んでください');
+  const res = await fetch(gasUrl, {
+    method: 'POST', redirect: 'follow',
+    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+    body: JSON.stringify({
+      action:'medical_updates', token, topics:selected, maxPerTopic:4,
+      customTopics:Array.isArray(customTopics) ? customTopics.slice(0,20).map(item => ({
+        id:String(item?.id || ''), label:String(item?.label || '').slice(0,60), query:String(item?.query || '').slice(0,140)
+      })) : []
+    })
+  });
+  if (!res.ok) throw new Error(`医療情報を取得できませんでした（${res.status}）`);
+  const json = await res.json();
+  if (!json.ok) throw new Error(json.error || '医療情報を取得できませんでした');
+  return {
+    checkedAt: String(json.checkedAt || isoNow()),
+    results: Array.isArray(json.results) ? json.results.slice(0, 60) : [],
+    warnings: Array.isArray(json.warnings) ? json.warnings : [],
+    sources: Array.isArray(json.sources) ? json.sources : []
+  };
+}
+
 export async function testConnection(gasUrl, token) {
   const state = await fetchCloud(gasUrl, token);
   return { ok: true, revision: Number(state.meta?.revision || 0) };
 }
 
-const MAX_ATTACHMENT_BYTES = 8 * 1024 * 1024;
-const MAX_IMAGE_SOURCE_BYTES = 20 * 1024 * 1024;
-const IMAGE_MAX_EDGE = 1280;
-const IMAGE_TARGET_BYTES = 480 * 1024;
-
-function imageFileName(name = 'image') {
-  const base = String(name).replace(/\.[^.]+$/, '') || 'image';
-  return `${base}-compressed.webp`;
-}
-
-function canvasToBlob(canvas, type, quality) {
-  return new Promise((resolve, reject) => canvas.toBlob(
-    blob => blob ? resolve(blob) : reject(new Error('画像の圧縮に失敗しました')),
-    type,
-    quality
-  ));
-}
-
-async function decodeImage(file) {
-  if (typeof createImageBitmap === 'function') return createImageBitmap(file);
-  const url = URL.createObjectURL(file);
-  try {
-    return await new Promise((resolve, reject) => {
-      const image = new Image();
-      image.onload = () => resolve(image);
-      image.onerror = () => reject(new Error('この画像形式を端末で読み込めませんでした'));
-      image.src = url;
-    });
-  } finally {
-    URL.revokeObjectURL(url);
-  }
-}
-
-/** アップロード前に画像を縮小・WebP化し、通信量とDrive使用量を抑える。 */
-export async function compressImageForUpload(file) {
-  const type = String(file?.type || '').toLowerCase();
-  if (!type.startsWith('image/') || /(?:gif|svg)/.test(type)) return file;
-  if (file.size > MAX_IMAGE_SOURCE_BYTES) throw new Error('画像は圧縮前20MB以下にしてください');
-
-  let source;
-  try {
-    source = await decodeImage(file);
-    const sourceWidth = Number(source.width || source.naturalWidth || 0);
-    const sourceHeight = Number(source.height || source.naturalHeight || 0);
-    if (!sourceWidth || !sourceHeight) throw new Error('画像の縦横サイズを確認できませんでした');
-    const initialScale = Math.min(1, IMAGE_MAX_EDGE / Math.max(sourceWidth, sourceHeight));
-    let width = Math.max(1, Math.round(sourceWidth * initialScale));
-    let height = Math.max(1, Math.round(sourceHeight * initialScale));
-    let quality = 0.78;
-    let blob;
-
-    for (let attempt = 0; attempt < 5; attempt += 1) {
-      const canvas = document.createElement('canvas');
-      canvas.width = width;
-      canvas.height = height;
-      const context = canvas.getContext('2d', { alpha: true });
-      if (!context) throw new Error('画像圧縮機能を使用できませんでした');
-      context.drawImage(source, 0, 0, width, height);
-      blob = await canvasToBlob(canvas, 'image/webp', quality);
-      if (blob.size <= IMAGE_TARGET_BYTES) break;
-      quality = Math.max(0.52, quality - 0.08);
-      width = Math.max(1, Math.round(width * 0.86));
-      height = Math.max(1, Math.round(height * 0.86));
-    }
-
-    if (!blob || blob.size >= file.size) return file;
-    return new File([blob], imageFileName(file.name), { type:'image/webp', lastModified:Date.now() });
-  } catch (error) {
-    // HEICなど端末で変換できない形式も、8MB以下なら従来どおり保存できる。
-    if (file.size <= MAX_ATTACHMENT_BYTES) return file;
-    throw error;
-  } finally {
-    if (source && typeof source.close === 'function') source.close();
-  }
-}
-
 export async function uploadAttachment(state, file) {
   if (!state.settings.gasUrl || !state.settings.syncToken) throw new Error('添付には同期URLと同期トークンが必要です');
-  const originalSize = file.size;
-  const uploadFile = await compressImageForUpload(file);
-  if (uploadFile.size > MAX_ATTACHMENT_BYTES) throw new Error('圧縮後も8MBを超えています。画像を小さくして再度お試しください');
+  if (file.size > 8 * 1024 * 1024) throw new Error('添付は1ファイル8MB以下にしてください');
   const base64 = await new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = () => resolve(String(reader.result));
     reader.onerror = () => reject(new Error('添付ファイルを読み込めませんでした'));
-    reader.readAsDataURL(uploadFile);
+    reader.readAsDataURL(file);
   });
   const res = await fetch(state.settings.gasUrl, {
     method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, redirect: 'follow',
-    body: JSON.stringify({ action: 'upload', token: state.settings.syncToken, fileName: uploadFile.name, mimeType: uploadFile.type, base64 })
+    body: JSON.stringify({ action: 'upload', token: state.settings.syncToken, fileName: file.name, mimeType: file.type, base64 })
   });
   if (!res.ok) throw new Error(`添付の保存に失敗しました（${res.status}）`);
   const json = await res.json();
   if (!json.ok) throw new Error(json.error || '添付を保存できませんでした');
-  return { fileId: json.fileId, name: json.name, url: json.url, previewUrl: json.previewUrl || json.url, mimeType: uploadFile.type, size: uploadFile.size, originalSize, compressed:uploadFile.size < originalSize, uploadedAt: isoNow() };
+  return { fileId: json.fileId, name: json.name, url: json.url, previewUrl: json.previewUrl || json.url, mimeType: file.type, size: file.size, uploadedAt: isoNow() };
 }

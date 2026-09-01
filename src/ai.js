@@ -9,6 +9,10 @@ export function buildContext(state) {
     habits: state.habits.filter(x => !x.deletedAt).slice(-20),
     wishes: state.wishes.filter(x => !x.deletedAt).slice(-30),
     health: state.healthItems.filter(x => !x.deletedAt).slice(-20),
+    medicalWatch: {
+      lastCheckedAt: state.settings?.medicalWatch?.lastCheckedAt || '',
+      results: (state.settings?.medicalWatch?.results || []).slice(0, 24)
+    },
     priorityIssues: state.records.filter(x => !x.deletedAt && x.kind === 'priorityIssue').slice(-30),
     recentRecords: state.records.filter(x => !x.deletedAt && x.domain !== 'income' && x.kind !== 'priorityIssue').slice(-30),
     incomeRecords: state.records.filter(x => !x.deletedAt && (x.kind === 'incomeRecord' || (x.domain === 'income' && !['expenseRecord','fixedCostRecord','debtRecord'].includes(x.kind)))).slice(-30),
@@ -28,7 +32,8 @@ export function buildAnalysisRequest(state, question, mode = 'cross') {
     action: 'ai', token: state.settings.syncToken, provider: state.settings.provider, mode, question,
     persona, theories: enabled, context: buildContext(state),
     guardrails: {
-      structure: ['事実','推測','改善案','優先順位','今日の一歩'],
+      structure: ['現状整理','良い兆し','注意点','人生全体のバランス','今日の一歩','最後の一言'],
+      separateFactsInferenceAndAdvice: true,
       medicalDiagnosis: false,
       simulationNotPrediction: true,
       avoidOverconfidence: true,
@@ -36,7 +41,11 @@ export function buildAnalysisRequest(state, question, mode = 'cross') {
       realityBeforeWishfulThinking: true,
       idealFutureIsDirectionNotPassFail: true,
       planningHorizonAge80IsNotLifeExpectancy: true,
-      checkAlignmentWithIdealFuture: true
+      checkAlignmentWithIdealFuture: true,
+      balanceAcrossLifeDomains: true,
+      healthSupportsLifeNotWholeLife: true,
+      pastAdversityAsAssetWithoutGlorifyingSuffering: true,
+      protectMedicalReality: true
     }
   };
 }
@@ -69,6 +78,14 @@ export function buildNotebookMarkdown(state) {
       const details = Object.entries(r.details || {}).filter(([, value]) => value && !Array.isArray(value));
       for (const [key, value] of details) lines.push(`- ${key}: ${value}`);
     }
+  }
+  const watched = state.settings?.medicalWatch || {};
+  if ((watched.results || []).length) {
+    lines.push('', '## 公式医療情報ウォッチ', `最終確認: ${watched.lastCheckedAt || ''}`);
+    for (const item of watched.results.slice(0, 60)) {
+      lines.push(`- [${item.stage || item.source || '研究情報'}] ${item.topic || ''}｜${item.title || ''}｜${item.date || ''}｜${item.url || ''}`);
+    }
+    lines.push('- 注意: 研究・臨床試験・日本での承認・保険適用は別。治療への適用可否は専門医へ確認する。');
   }
   return lines.join('\n');
 }
