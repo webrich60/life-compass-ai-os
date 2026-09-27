@@ -338,6 +338,11 @@ let deferredInstallPrompt = null;
 let searchKind = 'all';
 let lifeView = 'cards';
 let wishTab = 'wanted';
+const wishFilters = {
+  wanted:{ query:'', category:'すべて', status:'すべて' },
+  place:{ query:'', category:'すべて', status:'すべて' },
+  experience:{ query:'', category:'すべて', status:'すべて' }
+};
 let financeTab = 'income';
 let calendarMonth = localDateKey().slice(0,7);
 let calendarSelectedDate = localDateKey();
@@ -940,6 +945,60 @@ function wishTabsHtml(counts) {
   return `<div class="wish-mobile-tabs" role="tablist" aria-label="夢・楽しみの種類">${tabs.map(([id,label,icon,count])=>`<button class="${wishTab===id?'active':''}" data-wish-tab="${id}" role="tab" aria-selected="${wishTab===id}"><span>${icon}</span><b>${label}</b><small>${count}件</small></button>`).join('')}</div>`;
 }
 
+function wishFilterOptions(panel) {
+  if (panel === 'place') return PLACE_CATEGORIES;
+  if (panel === 'experience') return EXPERIENCE_TYPES;
+  return WISH_AREAS;
+}
+
+function wishFilterCategory(row, panel) {
+  if (panel === 'place') return row?.details?.placeCategory || 'その他';
+  if (panel === 'experience') return row?.details?.experienceType || '趣味・体験';
+  return row?.details?.wishArea || '一般';
+}
+
+function wishFilterBarHtml(panel, rows) {
+  const filter = wishFilters[panel] || wishFilters.wanted;
+  const labels = { wanted:'欲しいもの', place:'行きたい場所', experience:'やってみたいこと' };
+  const placeholders = {
+    wanted:'例：パソコン、レンズ、車…',
+    place:'例：温泉、ホテル、福井、児島…',
+    experience:'例：旅行、治療、挑戦、学び…'
+  };
+  const categories = ['すべて', ...wishFilterOptions(panel)];
+  return `<div class="wish-finder" data-wish-finder="${panel}">
+    <div class="wish-search-row"><label><span>🔎 ${labels[panel]}を探す</span><input type="search" value="${esc(filter.query)}" data-wish-query="${panel}" placeholder="${placeholders[panel]}" autocomplete="off"></label><label class="wish-status-filter"><span>状態</span><select data-wish-status="${panel}"><option ${filter.status==='すべて'?'selected':''}>すべて</option><option ${filter.status==='いつか'?'selected':''}>いつか</option><option ${filter.status==='検討中'?'selected':''}>検討中</option><option ${filter.status==='計画中'?'selected':''}>計画中</option><option ${filter.status==='実現済み'?'selected':''}>実現済み</option></select></label></div>
+    <div class="wish-category-strip" aria-label="${labels[panel]}のカテゴリ">${categories.map(category=>`<button type="button" class="${filter.category===category?'active':''}" data-wish-category-panel="${panel}" data-wish-category="${esc(category)}">${esc(category)}</button>`).join('')}</div>
+    <div class="wish-result-summary"><b data-wish-result-count="${panel}">${rows.length}</b><span>件表示</span><button type="button" data-wish-filter-reset="${panel}">絞り込みを解除</button></div>
+  </div>`;
+}
+
+function applyWishFilters(panel) {
+  const filter = wishFilters[panel];
+  const host = document.querySelector(`[data-wish-panel="${panel}"]`);
+  if (!filter || !host) return;
+  const query = filter.query.trim().toLowerCase();
+  let visible = 0;
+  host.querySelectorAll('.record[data-record-id]').forEach(card => {
+    const row = state.wishes.find(item => item.id === card.dataset.recordId);
+    if (!row) return;
+    const text = [row.title,row.body,(row.tags||[]).join(' '),JSON.stringify(row.details||{})].join(' ').toLowerCase();
+    const category = wishFilterCategory(row,panel);
+    const status = row.details?.wishStatus || (isWishCompleted(row) ? '実現済み' : 'いつか');
+    const matches = (!query || text.includes(query)) && (filter.category==='すべて' || category===filter.category) && (filter.status==='すべて' || status===filter.status);
+    card.hidden = !matches;
+    if (matches) visible += 1;
+  });
+  const count = host.querySelector(`[data-wish-result-count="${panel}"]`);
+  if (count) count.textContent = String(visible);
+  const empty = host.querySelector('[data-wish-filter-empty]');
+  if (empty) empty.hidden = visible !== 0;
+}
+
+function applyAllWishFilters() {
+  ['wanted','place','experience'].forEach(applyWishFilters);
+}
+
 
 function planningAge() {
   const birth = String(state.profile?.birthDate || '').trim();
@@ -1052,7 +1111,7 @@ function renderLife() {
   <div class="grid grid-2"><div class="card"><h3>目標</h3>${duplicateSummaryHtml(state.goals,'goal')}${activeRows(state.goals).map(taskHtml).join('')||'<div class="empty">目標はまだありません</div>'}</div><div class="card"><h3>習慣</h3>${duplicateSummaryHtml(state.habits,'habit')}${activeRows(state.habits).map(taskHtml).join('')||'<div class="empty">習慣はまだありません</div>'}</div></div>
   ${sectionHead('夢・楽しみ','欲しいもの・場所・やりたいことに加え、一般／健康・身体／医療／メンタルなど分野も選べます。','<button class="btn secondary" data-action="new-record" data-kind="wish">＋ 夢・楽しみを追加</button>')}
   ${wishTabsHtml({wanted:wantedItems.length,place:wantedPlaces.length,experience:wantedExperiences.length})}
-  <div class="grid grid-3 wish-grid"><section class="wish-group wish-wanted ${wishTab==='wanted'?'mobile-active':''}" data-wish-panel="wanted"><h3>欲しいもの</h3><p>手に入れたい物や暮らしの道具</p>${duplicateSummaryHtml(wantedItems,'wish')}${wantedItems.length?`<div class="record-list">${wantedItems.map(row=>recordCard(row,'wish')).join('')}</div>`:'<div class="empty">欲しいものはまだありません</div>'}</section><section class="wish-group wish-place ${wishTab==='place'?'mobile-active':''}" data-wish-panel="place"><h3>行きたい場所</h3><p>旅先、店、施設、訪れたい地域</p>${duplicateSummaryHtml(wantedPlaces,'wish')}${wantedPlaces.length?`<div class="record-list">${wantedPlaces.map(row=>recordCard(row,'wish')).join('')}</div>`:'<div class="empty">行きたい場所はまだありません</div>'}</section><section class="wish-group wish-experience ${wishTab==='experience'?'mobile-active':''}" data-wish-panel="experience"><h3>やってみたいこと・挑戦・体験</h3><p>成長のための挑戦から、純粋に楽しむ体験まで</p>${duplicateSummaryHtml(wantedExperiences,'wish')}${wantedExperiences.length?`<div class="record-list">${wantedExperiences.map(row=>recordCard(row,'wish')).join('')}</div>`:'<div class="empty">やってみたいことはまだありません</div>'}</section></div>`;
+  <div class="grid grid-3 wish-grid"><section class="wish-group wish-wanted ${wishTab==='wanted'?'mobile-active':''}" data-wish-panel="wanted"><h3>欲しいもの</h3><p>手に入れたい物や暮らしの道具</p>${wishFilterBarHtml('wanted',wantedItems)}${duplicateSummaryHtml(wantedItems,'wish')}${wantedItems.length?`<div class="record-list">${wantedItems.map(row=>recordCard(row,'wish')).join('')}</div><div class="empty wish-filter-empty" data-wish-filter-empty hidden>条件に合う欲しいものがありません</div>`:'<div class="empty">欲しいものはまだありません</div>'}</section><section class="wish-group wish-place ${wishTab==='place'?'mobile-active':''}" data-wish-panel="place"><h3>行きたい場所</h3><p>旅先、店、施設、訪れたい地域</p>${wishFilterBarHtml('place',wantedPlaces)}${duplicateSummaryHtml(wantedPlaces,'wish')}${wantedPlaces.length?`<div class="record-list">${wantedPlaces.map(row=>recordCard(row,'wish')).join('')}</div><div class="empty wish-filter-empty" data-wish-filter-empty hidden>条件に合う場所がありません</div>`:'<div class="empty">行きたい場所はまだありません</div>'}</section><section class="wish-group wish-experience ${wishTab==='experience'?'mobile-active':''}" data-wish-panel="experience"><h3>やってみたいこと・挑戦・体験</h3><p>成長のための挑戦から、純粋に楽しむ体験まで</p>${wishFilterBarHtml('experience',wantedExperiences)}${duplicateSummaryHtml(wantedExperiences,'wish')}${wantedExperiences.length?`<div class="record-list">${wantedExperiences.map(row=>recordCard(row,'wish')).join('')}</div><div class="empty wish-filter-empty" data-wish-filter-empty hidden>条件に合う体験がありません</div>`:'<div class="empty">やってみたいことはまだありません</div>'}</section></div>`;
   return `<div class="page-enter">${sectionHead('人生レーダー','自分で付ける現在の満足度です。初期値は50点、人生スコアは8項目の平均です。','<button class="btn" data-action="save-scores">点数を保存</button>')}
   <div class="card radar-wrap">${radarSvg()}<div class="score-editor">${DOMAINS.map(domain=>`<div class="score-row"><label>${domain.label}</label><input type="range" min="0" max="100" value="${state.scores[domain.id]}" data-score="${domain.id}" aria-label="${domain.label}の自己評価"><output>${state.scores[domain.id]}</output></div>`).join('')}</div></div>
   ${scoreGuideHtml()}
@@ -1580,7 +1639,7 @@ function recordCard(row, fallbackKind) {
   const editButton = row.details?.bodyRegion
     ? `<button class="btn small ghost" data-action="edit-body-region" data-region="${esc(row.details.bodyRegion)}">身体図で編集</button>`
     : `<button class="btn small ghost" data-action="edit-record" data-kind="${esc(kind)}" data-id="${esc(row.id)}">編集</button>`;
-  return `<article class="record visual-${visualColor} ${wishClass} ${financeCard?'income-record':''} ${row.details?.bodyRegion?'body-record':''} ${priorityCard?`priority-record ${(PRIORITY_META[row.details?.issuePriority]||PRIORITY_META['早めに']).className}`:''} ${completed?'completed':''} ${deadline?.className||''}">${completed?`<span class="completion-ribbon">✓ ${esc(completion.ribbon)}</span>`:''}<div class="record-lead"><span class="record-visual" aria-hidden="true">${esc(visualIcon)}</span><span class="record-date">${displayDate(row.date)}</span></div><div><span class="badge">${esc(financeCard?'お金':domainLabel(row.domain))}</span><h3>${esc(row.title)}</h3>${priorityCard?priorityBadgeHtml(row):''}${incomeAmountHtml}<p>${esc(row.body)}</p>${progress!==null?`<div class="progress" title="進捗 ${progress}%"><i style="width:${Math.max(0,Math.min(100,progress))}%"></i></div>`:''}<div class="record-meta">${bodyStatusBadges}${deadline?`<span class="deadline-badge ${deadline.className}">⚠ ${esc(deadline.label)}・期限 ${displayDate(row.details.dueDate)}</span>`:''}${row.details?.incomeType?`<span class="badge income-type-tag">${esc(row.details.incomeType)}</span>`:''}${row.details?.sourceName?`<span class="badge">収入元 ${esc(row.details.sourceName)}</span>`:''}${row.details?.incomePeriod?`<span class="badge">${esc(row.details.incomePeriod)}</span>`:''}${row.details?.incomeStatus?`<span class="badge ${row.details.incomeStatus==='見込'?'warn':row.details.incomeStatus==='確定'?'completion':''}">${esc(row.details.incomeStatus)}</span>`:''}${row.details?.amountKind?`<span class="badge">${esc(row.details.amountKind)}</span>`:''}${row.details?.expenseType?`<span class="badge expense-type-tag">${esc(row.details.expenseType)}</span>`:''}${row.details?.expensePeriod?`<span class="badge">${esc(row.details.expensePeriod)}</span>`:''}${row.details?.expenseStatus?`<span class="badge ${row.details.expenseStatus==='予定'?'warn':''}">${esc(row.details.expenseStatus)}</span>`:''}${row.details?.fixedCostType?`<span class="badge fixed-type-tag">${esc(row.details.fixedCostType)}</span>`:''}${row.details?.fixedCostFrequency?`<span class="badge">${esc(row.details.fixedCostFrequency)}</span>`:''}${row.details?.fixedCostStatus?`<span class="badge ${row.details.fixedCostStatus==='見直し候補'?'warn':''}">${esc(row.details.fixedCostStatus)}</span>`:''}${row.details?.debtType?`<span class="badge debt-type-tag">${esc(row.details.debtType)}</span>`:''}${row.details?.lenderName?`<span class="badge">借入先 ${esc(row.details.lenderName)}</span>`:''}${row.details?.monthlyPayment?`<span class="badge">毎月返済 ${incomeYen(moneyNumber(row.details.monthlyPayment))}</span>`:''}${row.details?.debtStatus?`<span class="badge ${row.details.debtStatus==='完済'?'completion':row.details.debtStatus==='返済猶予'?'warn':''}">${esc(row.details.debtStatus)}</span>`:''}${row.details?.issueCategory?`<span class="badge">${esc(row.details.issueCategory)}</span>`:''}${row.details?.issueStatus?`<span class="badge ${row.details.issueStatus==='解決済み'?'completion':row.details.issueStatus==='待ち'?'warn':''}">${esc(row.details.issueStatus)}</span>`:''}${priorityCard&&row.details?.dueDate?`<span class="deadline-badge ${(priorityDeadlineInfo(row)||{}).className||''}">期限 ${displayDate(row.details.dueDate)}${priorityDeadlineInfo(row)?` ・ ${esc(priorityDeadlineInfo(row).label)}`:''}</span>`:''}${row.details?.wishType?`<span class="badge wish-type-tag ${wishClass}">${esc(row.details.wishType)}</span>`:''}${row.details?.wishArea?`<span class="badge wish-area-tag wish-area-${wishAreaClass(row.details.wishArea)}">${esc(row.details.wishArea)}</span>`:''}${row.details?.placeCategory?`<span class="badge place-category-tag">${esc(row.details.placeCategory)}</span>`:''}${row.details?.accommodationType?`<span class="badge accommodation-type-tag">${esc(row.details.accommodationType)}</span>`:''}${row.details?.experienceType?`<span class="badge">${esc(row.details.experienceType)}</span>`:''}${kind==='healthItem'?`<span class="badge health-type-tag">${esc(healthItemType(row))}</span>`:''}${row.details?.medicalStatus?`<span class="badge ${row.details.medicalStatus==='完了'?'completion':row.details.medicalStatus==='実施予定'?'warn':''}">${esc(row.details.medicalStatus)}</span>`:''}${row.details?.facilityWishId&&relatedMedicalPlaceName(row.details.facilityWishId)?`<span class="badge medical-facility">医療機関 ${esc(relatedMedicalPlaceName(row.details.facilityWishId))}</span>`:''}${impactBadge('身体',row.details?.physicalImpact)}${impactBadge('メンタル',row.details?.mentalImpact)}${impactBadge('収入',row.details?.incomeImpact)}${row.details?.wishStatus?`<span class="badge ${row.details.wishStatus==='実現済み'?'completion':''}">${esc(row.details.wishStatus)}</span>`:''}${row.details?.goalStatus?`<span class="badge ${row.details.goalStatus==='達成済み'?'completion':''}">${esc(row.details.goalStatus)}</span>`:''}${row.details?.priority?`<span class="badge ${row.details.priority==='高'?'warn':''}">優先度 ${esc(row.details.priority)}</span>`:''}${row.details?.frequency?`<span class="badge">${esc(row.details.frequency)}</span>`:''}${row.details?.budget?`<span class="badge">予算 ${esc(row.details.budget)}</span>`:''}${kind==='futureVision'&&row.details?.futureArea?`<span class="badge future-area">${esc(row.details.futureArea)}</span>`:''}${kind==='futureVision'&&row.details?.futureStatus?`<span class="badge future-status">${esc(row.details.futureStatus)}</span>`:''}${kind==='futureVision'&&row.details?.targetAge?`<span class="badge">目安 ${esc(row.details.targetAge)}歳</span>`:''}</div>${kind==='futureVision'?futureVisionImageHtml(attachments):''}${referenceLinksHtml(row.details,true)}${attachments.filter(file=>kind!=='futureVision'||!String(file.mimeType||'').startsWith('image/')).map(file=>`<a class="attachment-link" href="${esc(file.url)}" target="_blank" rel="noopener noreferrer">添付：${esc(file.name)}</a>`).join('')}</div><div class="record-actions">${completionButton}<button class="btn small ghost" data-action="view-record" data-kind="${esc(kind)}" data-id="${esc(row.id)}">見る</button>${editButton}<button class="btn small danger" data-action="delete-record" data-kind="${esc(kind)}" data-id="${esc(row.id)}">削除</button></div></article>`;
+  return `<article data-record-id="${esc(row.id)}" class="record visual-${visualColor} ${wishClass} ${financeCard?'income-record':''} ${row.details?.bodyRegion?'body-record':''} ${priorityCard?`priority-record ${(PRIORITY_META[row.details?.issuePriority]||PRIORITY_META['早めに']).className}`:''} ${completed?'completed':''} ${deadline?.className||''}">${completed?`<span class="completion-ribbon">✓ ${esc(completion.ribbon)}</span>`:''}<div class="record-lead"><span class="record-visual" aria-hidden="true">${esc(visualIcon)}</span><span class="record-date">${displayDate(row.date)}</span></div><div><span class="badge">${esc(financeCard?'お金':domainLabel(row.domain))}</span><h3>${esc(row.title)}</h3>${priorityCard?priorityBadgeHtml(row):''}${incomeAmountHtml}<p>${esc(row.body)}</p>${progress!==null?`<div class="progress" title="進捗 ${progress}%"><i style="width:${Math.max(0,Math.min(100,progress))}%"></i></div>`:''}<div class="record-meta">${bodyStatusBadges}${deadline?`<span class="deadline-badge ${deadline.className}">⚠ ${esc(deadline.label)}・期限 ${displayDate(row.details.dueDate)}</span>`:''}${row.details?.incomeType?`<span class="badge income-type-tag">${esc(row.details.incomeType)}</span>`:''}${row.details?.sourceName?`<span class="badge">収入元 ${esc(row.details.sourceName)}</span>`:''}${row.details?.incomePeriod?`<span class="badge">${esc(row.details.incomePeriod)}</span>`:''}${row.details?.incomeStatus?`<span class="badge ${row.details.incomeStatus==='見込'?'warn':row.details.incomeStatus==='確定'?'completion':''}">${esc(row.details.incomeStatus)}</span>`:''}${row.details?.amountKind?`<span class="badge">${esc(row.details.amountKind)}</span>`:''}${row.details?.expenseType?`<span class="badge expense-type-tag">${esc(row.details.expenseType)}</span>`:''}${row.details?.expensePeriod?`<span class="badge">${esc(row.details.expensePeriod)}</span>`:''}${row.details?.expenseStatus?`<span class="badge ${row.details.expenseStatus==='予定'?'warn':''}">${esc(row.details.expenseStatus)}</span>`:''}${row.details?.fixedCostType?`<span class="badge fixed-type-tag">${esc(row.details.fixedCostType)}</span>`:''}${row.details?.fixedCostFrequency?`<span class="badge">${esc(row.details.fixedCostFrequency)}</span>`:''}${row.details?.fixedCostStatus?`<span class="badge ${row.details.fixedCostStatus==='見直し候補'?'warn':''}">${esc(row.details.fixedCostStatus)}</span>`:''}${row.details?.debtType?`<span class="badge debt-type-tag">${esc(row.details.debtType)}</span>`:''}${row.details?.lenderName?`<span class="badge">借入先 ${esc(row.details.lenderName)}</span>`:''}${row.details?.monthlyPayment?`<span class="badge">毎月返済 ${incomeYen(moneyNumber(row.details.monthlyPayment))}</span>`:''}${row.details?.debtStatus?`<span class="badge ${row.details.debtStatus==='完済'?'completion':row.details.debtStatus==='返済猶予'?'warn':''}">${esc(row.details.debtStatus)}</span>`:''}${row.details?.issueCategory?`<span class="badge">${esc(row.details.issueCategory)}</span>`:''}${row.details?.issueStatus?`<span class="badge ${row.details.issueStatus==='解決済み'?'completion':row.details.issueStatus==='待ち'?'warn':''}">${esc(row.details.issueStatus)}</span>`:''}${priorityCard&&row.details?.dueDate?`<span class="deadline-badge ${(priorityDeadlineInfo(row)||{}).className||''}">期限 ${displayDate(row.details.dueDate)}${priorityDeadlineInfo(row)?` ・ ${esc(priorityDeadlineInfo(row).label)}`:''}</span>`:''}${row.details?.wishType?`<span class="badge wish-type-tag ${wishClass}">${esc(row.details.wishType)}</span>`:''}${row.details?.wishArea?`<span class="badge wish-area-tag wish-area-${wishAreaClass(row.details.wishArea)}">${esc(row.details.wishArea)}</span>`:''}${row.details?.placeCategory?`<span class="badge place-category-tag">${esc(row.details.placeCategory)}</span>`:''}${row.details?.accommodationType?`<span class="badge accommodation-type-tag">${esc(row.details.accommodationType)}</span>`:''}${row.details?.experienceType?`<span class="badge">${esc(row.details.experienceType)}</span>`:''}${kind==='healthItem'?`<span class="badge health-type-tag">${esc(healthItemType(row))}</span>`:''}${row.details?.medicalStatus?`<span class="badge ${row.details.medicalStatus==='完了'?'completion':row.details.medicalStatus==='実施予定'?'warn':''}">${esc(row.details.medicalStatus)}</span>`:''}${row.details?.facilityWishId&&relatedMedicalPlaceName(row.details.facilityWishId)?`<span class="badge medical-facility">医療機関 ${esc(relatedMedicalPlaceName(row.details.facilityWishId))}</span>`:''}${impactBadge('身体',row.details?.physicalImpact)}${impactBadge('メンタル',row.details?.mentalImpact)}${impactBadge('収入',row.details?.incomeImpact)}${row.details?.wishStatus?`<span class="badge ${row.details.wishStatus==='実現済み'?'completion':''}">${esc(row.details.wishStatus)}</span>`:''}${row.details?.goalStatus?`<span class="badge ${row.details.goalStatus==='達成済み'?'completion':''}">${esc(row.details.goalStatus)}</span>`:''}${row.details?.priority?`<span class="badge ${row.details.priority==='高'?'warn':''}">優先度 ${esc(row.details.priority)}</span>`:''}${row.details?.frequency?`<span class="badge">${esc(row.details.frequency)}</span>`:''}${row.details?.budget?`<span class="badge">予算 ${esc(row.details.budget)}</span>`:''}${kind==='futureVision'&&row.details?.futureArea?`<span class="badge future-area">${esc(row.details.futureArea)}</span>`:''}${kind==='futureVision'&&row.details?.futureStatus?`<span class="badge future-status">${esc(row.details.futureStatus)}</span>`:''}${kind==='futureVision'&&row.details?.targetAge?`<span class="badge">目安 ${esc(row.details.targetAge)}歳</span>`:''}</div>${kind==='futureVision'?futureVisionImageHtml(attachments):''}${referenceLinksHtml(row.details,true)}${attachments.filter(file=>kind!=='futureVision'||!String(file.mimeType||'').startsWith('image/')).map(file=>`<a class="attachment-link" href="${esc(file.url)}" target="_blank" rel="noopener noreferrer">添付：${esc(file.name)}</a>`).join('')}</div><div class="record-actions">${completionButton}<button class="btn small ghost" data-action="view-record" data-kind="${esc(kind)}" data-id="${esc(row.id)}">見る</button>${editButton}<button class="btn small danger" data-action="delete-record" data-kind="${esc(kind)}" data-id="${esc(row.id)}">削除</button></div></article>`;
 }
 
 function render() {
@@ -1655,6 +1714,32 @@ function bindPage() {
     });
     document.querySelectorAll('[data-wish-panel]').forEach(panel=>panel.classList.toggle('mobile-active',panel.dataset.wishPanel===wishTab));
   }));
+  document.querySelectorAll('[data-wish-query]').forEach(input => input.addEventListener('input',()=>{
+    const panel=input.dataset.wishQuery;
+    wishFilters[panel].query=input.value;
+    applyWishFilters(panel);
+  }));
+  document.querySelectorAll('[data-wish-status]').forEach(select => select.addEventListener('change',()=>{
+    const panel=select.dataset.wishStatus;
+    wishFilters[panel].status=select.value;
+    applyWishFilters(panel);
+  }));
+  document.querySelectorAll('[data-wish-category-panel]').forEach(button => button.addEventListener('click',()=>{
+    const panel=button.dataset.wishCategoryPanel;
+    wishFilters[panel].category=button.dataset.wishCategory;
+    document.querySelectorAll(`[data-wish-category-panel="${panel}"]`).forEach(item=>item.classList.toggle('active',item===button));
+    applyWishFilters(panel);
+  }));
+  document.querySelectorAll('[data-wish-filter-reset]').forEach(button => button.addEventListener('click',()=>{
+    const panel=button.dataset.wishFilterReset;
+    wishFilters[panel]={query:'',category:'すべて',status:'すべて'};
+    const host=document.querySelector(`[data-wish-panel="${panel}"]`);
+    const query=host?.querySelector(`[data-wish-query="${panel}"]`); if(query) query.value='';
+    const status=host?.querySelector(`[data-wish-status="${panel}"]`); if(status) status.value='すべて';
+    host?.querySelectorAll(`[data-wish-category-panel="${panel}"]`).forEach(item=>item.classList.toggle('active',item.dataset.wishCategory==='すべて'));
+    applyWishFilters(panel);
+  }));
+  applyAllWishFilters();
   document.querySelectorAll('[data-finance-tab]').forEach(button => button.addEventListener('click',()=>{
     financeTab=button.dataset.financeTab;
     render();
@@ -2395,11 +2480,11 @@ async function registerServiceWorker() {
   if (!('serviceWorker' in navigator)) return;
   const hadController = Boolean(navigator.serviceWorker.controller);
   try {
-    const registration = await navigator.serviceWorker.register('./sw.js?v=3.7.1', { updateViaCache:'none' });
+    const registration = await navigator.serviceWorker.register('./sw.js?v=3.8.0', { updateViaCache:'none' });
     await registration.update();
     if (hadController) {
       navigator.serviceWorker.addEventListener('controllerchange',()=>{
-        const refreshKey='life-compass-sw-refresh-v3.7.1';
+        const refreshKey='life-compass-sw-refresh-v3.8.0';
         if(sessionStorage.getItem(refreshKey))return;
         sessionStorage.setItem(refreshKey,'1');
         location.reload();

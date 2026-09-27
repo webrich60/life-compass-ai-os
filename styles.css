@@ -490,3 +490,24 @@ button:disabled{cursor:wait;opacity:.58}
   .body-map-panel{padding:16px 12px}.body-map-intro{display:block}.body-map-intro h3{font-size:20px}.body-map-intro p{font-size:15px}.body-map-totals{grid-template-columns:repeat(2,minmax(0,1fr));margin-top:14px}.body-map-totals>div{padding:9px}.body-status-legend{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px}.body-status-chip{min-width:0;padding:8px 7px;border-radius:11px;font-size:12px}.body-status-chip i{flex:0 0 auto}.body-map-grid{grid-template-columns:1fr;gap:14px}.body-figure-card{padding:14px 5px}.body-figure{width:min(100%,310px)}.body-zone{width:38px;height:38px;border-width:3px}.body-zone-check{font-size:23px}.body-status-selector{grid-template-columns:1fr}.body-status-option>span{font-size:15px}
   .life-game-sky{padding:22px 17px 17px}.life-game-sky h3{font-size:23px}.life-game-sky p{font-size:15px}.game-metrics{grid-template-columns:1fr;padding:0 15px}.game-metrics>div{grid-template-columns:auto 48px 1fr}.game-progress{margin:20px 22px 27px}.game-route{grid-template-columns:1fr;padding:0 15px 22px;gap:15px}.game-route:before{left:43px;right:auto;top:4%;bottom:6%;width:9px;height:auto;background:repeating-linear-gradient(180deg,#ffe49a 0 20px,#fff3c6 20px 40px)}.game-node,.game-node:nth-child(even){min-height:0;margin:0 0 0 35px;padding:13px 13px 13px 78px;text-align:left}.game-node-icon{position:absolute;left:8px;top:50%;transform:translateY(-50%);width:58px;height:58px;margin:0;font-size:31px}.game-step{left:-49px;top:50%;transform:translateY(-50%);width:31px;height:31px}.game-node b{font-size:15px}.game-rule{padding:14px 16px;font-size:14px}
 }
+
+/* v3.8.0: PC / mobile wish finder */
+.wish-finder{margin:14px 0 15px;padding:12px;border:1px solid #b7c9df;border-radius:16px;background:linear-gradient(145deg,#fbfdff,#f1f6fb)}
+.wish-search-row{display:grid;grid-template-columns:minmax(0,1fr) 132px;gap:8px;align-items:end}
+.wish-search-row label{display:grid;gap:6px;min-width:0;color:#203752;font-size:12px;font-weight:900}
+.wish-search-row input,.wish-search-row select{width:100%;min-width:0;min-height:42px;padding:9px 11px;border:2px solid #9fb6d2;border-radius:11px;background:#fff;color:#071426;font:inherit;font-size:14px;font-weight:750;outline:none}
+.wish-search-row input:focus,.wish-search-row select:focus{border-color:#1769d8;box-shadow:0 0 0 3px rgba(23,105,216,.12)}
+.wish-category-strip{display:flex;gap:6px;margin-top:10px;overflow-x:auto;padding:1px 1px 5px;scrollbar-width:thin;overscroll-behavior-inline:contain}
+.wish-category-strip button{flex:0 0 auto;min-height:34px;padding:6px 10px;border:1px solid #aebfd3;border-radius:999px;background:#fff;color:#2c4561;font-size:12px;font-weight:850;white-space:nowrap}
+.wish-category-strip button.active{border-color:#1769d8;background:#1769d8;color:#fff;box-shadow:0 4px 10px rgba(23,105,216,.18)}
+.wish-result-summary{display:flex;align-items:center;gap:5px;margin-top:5px;color:#486079;font-size:12px;font-weight:750}
+.wish-result-summary b{color:#0d5dbd;font-size:14px}.wish-result-summary button{margin-left:auto;padding:5px 8px;border:0;border-radius:8px;background:transparent;color:#0d5dbd;font-size:11px;font-weight:850}
+.wish-result-summary button:hover{background:#e6f0ff}.wish-filter-empty{margin-top:10px}
+.record[hidden]{display:none!important}
+@media(max-width:700px){
+  .wish-finder{margin:12px 0 13px;padding:10px;border-radius:14px}
+  .wish-search-row{grid-template-columns:1fr 108px;gap:7px}.wish-search-row label{font-size:12px}.wish-search-row input,.wish-search-row select{min-height:46px;padding:10px;font-size:16px}
+  .wish-category-strip{margin-left:-2px;margin-right:-2px;padding-bottom:7px}.wish-category-strip button{min-height:39px;padding:7px 11px;font-size:13px}
+  .wish-result-summary{font-size:13px}.wish-result-summary button{font-size:12px}
+}
+@media(max-width:430px){.wish-search-row{grid-template-columns:1fr}.wish-status-filter{grid-template-columns:64px 1fr!important;align-items:center}.wish-status-filter span{font-size:12px}.wish-search-row select{min-height:42px}}

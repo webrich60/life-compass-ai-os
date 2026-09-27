@@ -288,7 +288,7 @@ export function buildLifeAssetStudioExport(state = {}) {
     version: '1.0',
     exportedAt: isoNow(),
     source: {
-      app: 'Life Compass AI OS', appVersion: '3.7.1',
+      app: 'Life Compass AI OS', appVersion: '3.8.0',
       schemaVersion: Number(state.schemaVersion || 0),
       stateId: String(state.meta?.id || ''), revision: Number(state.meta?.revision || 0),
       updatedAt: String(state.meta?.updatedAt || '')
