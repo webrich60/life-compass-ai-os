@@ -12,8 +12,8 @@ export const DEFAULT_LINE_SCOPES = {
 };
 
 export const WISH_TYPES = ['欲しいもの', '行きたい場所', 'やってみたいこと・挑戦・体験'];
-export const WISH_AREAS = ['一般', '健康・身体', '医療', 'メンタル', '仕事・収入', '家族', 'その他'];
-export const EXPERIENCE_TYPES = ['挑戦・成長', '趣味・体験', '人生で一度は'];
+export const WISH_AREAS = ['一般', '健康・身体', '医療', 'メンタル', '仕事・収入', '家族', '旅行', '観光', 'その他'];
+export const EXPERIENCE_TYPES = ['挑戦・成長', '趣味・体験', '遊び・旅行', 'プチ旅行', '人生で一度は'];
 export const PLACE_CATEGORIES = ['観光・旅行', '旅館・ホテル', '温泉・入浴', '飲食店・カフェ', '買い物', '医療機関', 'イベント・体験施設', 'その他'];
 export const ACCOMMODATION_TYPES = ['旅館', 'ホテル', '温泉旅館', 'リゾートホテル', '民宿・ペンション', 'キャンプ・グランピング', 'その他'];
 
@@ -46,6 +46,14 @@ export const DOMAINS = [
   { id: 'family', label: '家族', icon: 'users', color: '#e56b3f' },
   { id: 'challenge', label: '挑戦', icon: 'mountain', color: '#2878b5' },
   { id: 'learning', label: '学び', icon: 'book-open', color: '#697386' }
+];
+
+export const RECORD_DOMAIN_OPTIONS = [
+  ...DOMAINS,
+  { id: 'play', label: '遊び' },
+  { id: 'sightseeing', label: '観光' },
+  { id: 'travel', label: '旅行' },
+  { id: 'lodging', label: '宿泊' }
 ];
 
 export const THEORY_OPTIONS = [
@@ -209,6 +217,42 @@ export function normalizeRecord(input = {}, kind = 'record') {
   };
 }
 
+
+function extractLegacyComparisonSections(body = '') {
+  const text = String(body || '');
+  const sections = {};
+  const re = /【([^】]+)】\n([\s\S]*?)(?=\n\n【|$)/g;
+  let match;
+  while ((match = re.exec(text))) sections[String(match[1] || '').trim()] = String(match[2] || '').trim();
+  return sections;
+}
+
+function legacyFutureVisionSeed(raw, normalizedComparisons = []) {
+  const profile = raw?.profile && typeof raw.profile === 'object' ? raw.profile : {};
+  const legacyComparison = normalizedComparisons.find(row =>
+    row?.id === 'legacy_profile_life_comparison' || row?.legacy?.originalSection === 'profile.lifeComparison'
+  );
+  const sections = extractLegacyComparisonSections(legacyComparison?.body || '');
+  const pick = (...values) => values.map(v => String(v || '').trim()).find(Boolean) || '';
+  const overall = pick(profile.newDesiredLife, sections['新しい理想']);
+  const reason = pick(profile.newIdealReason, sections['新しい理想の理由']);
+  const rows = [
+    ['legacy_future_health','健康','健康の理想',pick(profile.lifeGapHealth, sections['健康の差'])],
+    ['legacy_future_money','収入・お金','収入・お金の理想',pick(profile.lifeGapMoney, sections['収入の差'])],
+    ['legacy_future_work','仕事・事業','仕事・事業の理想',pick(profile.lifeGapWork, sections['仕事の差'])],
+    ['legacy_future_family','家族','家族・人間関係の理想',pick(profile.lifeGapFamily, sections['家族の差'])],
+    ['legacy_future_lifestyle','ライフスタイル','自由・暮らしの理想',pick(profile.lifeGapFreedom, sections['自由の差'])],
+    ['legacy_future_values','生き方・価値観','これから手にしたい人生',overall]
+  ];
+  const stamp = String(profile.lifeComparisonUpdatedAt || profile.updatedAt || raw?.meta?.updatedAt || raw?.meta?.createdAt || isoNow());
+  return rows.filter(([, , , body]) => body).map(([id, futureArea, title, body]) => normalizeRecord({
+    id, kind:'futureVision', domain: futureArea === '健康' ? 'health' : futureArea === '収入・お金' ? 'income' : futureArea === '仕事・事業' ? 'work' : futureArea === '家族' ? 'family' : 'freedom',
+    title, body, createdAt: stamp, updatedAt: stamp, source:'legacy-future-recovery',
+    details:{ futureArea, futureStatus:'方向性を考える', ...(reason ? { whyImportant: reason } : {}) },
+    legacy:{ originalSection:'profile.lifeComparison', recoveredToFutureVision:true }
+  }, 'futureVision'));
+}
+
 export function normalizeState(raw = {}) {
   const base = createEmptyState();
   const state = {
@@ -280,6 +324,12 @@ export function normalizeState(raw = {}) {
   for (const key of ['records','goals','habits','wishes','healthItems','timeline','comparisons','products','reviews','simulations','futureVisions']) {
     const kind = key === 'wishes' ? 'wish' : key === 'futureVisions' ? 'futureVision' : key.replace(/s$/, '');
     state[key] = Array.isArray(raw[key]) ? raw[key].map(x => normalizeRecord(x, kind)) : [];
+  }
+  // 旧Life Compassの「理想の人生」はプロフィール／人生比較に保存されていたため、
+  // 新しい futureVisions が空のときだけ分野別カードへ安全に復元する。
+  // 既存の理想カードが1件でもある場合は自動生成せず、現在のデータを優先する。
+  if (!state.futureVisions.some(row => !row.deletedAt)) {
+    state.futureVisions = legacyFutureVisionSeed(raw, state.comparisons);
   }
   state.wishes = state.wishes.map(row => {
     const legacyCategory = String(row.legacy?.originalCategory || '');
